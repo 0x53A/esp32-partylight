@@ -1,0 +1,49 @@
+[package]
+name = "esp32_partylight"
+version = "0.1.0"
+edition = "2024"
+
+# without 'test = false', vscode shows an error
+# https://github.com/rust-lang/vscode-rust/issues/729#issuecomment-1135449424
+[[bin]]
+name = "esp32_partylight"
+test = false
+bench = false
+
+
+[dependencies]
+esp-hal = { version = "1.0.0-beta.1", features = ["esp32s3", "unstable", "rt"] }
+esp-backtrace = { version = "0.16.0", features = [
+    "esp32s3",
+    "panic-handler",
+    "exception-handler",
+    "println",
+] }
+esp-bootloader-esp-idf = "0.1.0"
+esp-println = { version = "0.14.0", features = ["esp32s3"] }
+critical-section = "1.2.0"
+embedded-graphics = "0.8.1"
+ssd1306 = "0.10.0"
+embedded-hal = "1.0.0"
+anyhow = { version = "1.0.98", default-features = false }
+heapless = "0.8.0"
+esp-alloc = "0.8.0"
+nb = "1.1.0"
+fugit = "0.3.7"
+ws2812-spi = "0.5.1"
+smart-leds-trait = "0.3.1"
+smart-leds = "0.4.0"
+esp-wifi = { version = "0.15.0", features = ["esp32s3", "esp-now"] }
+esp-hal-wifimanager = "0.1.0"
+microfft = "0.6.0"
+libm = "0.2.15"
+#esp-radio = { git = "https://github.com/esp-rs/esp-hal" }
+
+
+[profile.release]
+opt-level = 's'     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Use single codegen unit for better optimization
+#strip = true        # strip symbols
+#panic = "abort"
+
