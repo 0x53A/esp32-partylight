@@ -19,7 +19,7 @@ use esp_println::println;
 use heapless::Vec;
 
 use esp_alloc as _;
-use microfft::real::rfft_512;
+use microfft::{real::rfft_512, Complex32};
 use smart_leds::RGB8;
 use smart_leds::SmartLedsWrite;
 
@@ -82,15 +82,55 @@ fn process_fft_and_update_led(
     // Bass: bin 1 (~94Hz)
     // Mid: bins 2-10
     // Treble: bins 11-20 (~1034-1880Hz)
+    fn norm_bucket(c: &Complex32) -> f32 {
+        // variant 1: linear
+        // libm::sqrtf(c.norm_sqr()) / 512.0
 
-    let bass_energy: f32 = spectrum[1..2].iter().map(|c| c.norm_sqr()).sum();
-    let mid_energy: f32 = spectrum[2..11].iter().map(|c| c.norm_sqr()).sum();
-    let treble_energy: f32 = spectrum[11..21].iter().map(|c| c.norm_sqr()).sum();
+        // variant 2: squared
+        // c.norm_sqr() * 0.001 / 255.0
 
-    // Normalize energies (tweak these values)
-    let bass = (bass_energy * 0.001).min(255.0) as u8;
-    let mid = (mid_energy * 0.0001).min(255.0) as u8;
-    let treble = (treble_energy * 0.001).min(255.0) as u8;
+        // variant 3: squared + noise gate + x^3
+        const GATE: f32 = 0.3;
+        let val = c.norm_sqr() * 0.001 / 255.0;
+        if val < GATE {
+            0.0
+        } else {
+            // scale to 1.0
+            let val = val;
+            val * val * val
+        }
+
+        // variant 4: premult + squared + noise gate + x^3
+        // const GATE: f32 = 0.01;
+        // let c = c.scale(10.0);
+        // let val = c.norm_sqr() * 0.001 / 255.0;
+        // if val < GATE {
+        //     0.0
+        // } else {
+        //     // scale to 1.0
+        //     let val = val;
+        //     val * val * val
+        // }
+    }
+
+    let bass_energy: f32 = spectrum[1..2].iter().map(|c| norm_bucket(c)).sum();
+    let mid_energy: f32 = spectrum[2..11].iter().map(|c| norm_bucket(c)).sum();
+    let treble_energy: f32 = spectrum[11..21].iter().map(|c| norm_bucket(c)).sum();
+
+    // Normalize energies
+    let bass = (bass_energy * 255.0).min(255.0) as u8;
+    let mid = (mid_energy * 255.0).min(255.0) as u8;
+    let treble = (treble_energy * 255.0).min(255.0) as u8;
+
+    // Gamma correction (typically 2.2-2.8 for displays)
+    let gamma_correct = |linear: u8| -> u8 {
+        let normalized = (linear as f32) / 255.0;
+        (libm::powf(normalized, 1.0 / 2.2) * 255.0) as u8
+    };
+
+    // let bass = gamma_correct(bass);
+    // let mid = gamma_correct(mid);
+    // let treble = gamma_correct(treble);
 
     let color = RGB8::new(bass, 0, 0);
 
