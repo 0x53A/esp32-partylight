@@ -1,0 +1,3 @@
+[submodule "app/fonts/berkeley-mono"]
+	path = app/fonts/berkeley-mono
+	url = https://github.com/0x53A/berkeley-mono.git

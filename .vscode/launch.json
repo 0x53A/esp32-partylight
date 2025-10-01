@@ -1,0 +1,31 @@
+{
+    "configurations": [
+    {
+        "type": "probe-rs-debug",
+        "request": "launch",
+        "name": "probe-rs",
+        "connectUnderReset": true,
+        "chip": "esp32s3",
+        "probe": "303a:1001",
+        "flashingConfig": {
+            "flashingEnabled": true,
+            "haltAfterReset": true
+        },
+        "coreConfigs": [
+            {
+                "rttEnabled": true,
+                "rttChannelFormats": [
+                    {
+                    "channelNumber": 0,
+                    // Format RTT data as String data
+                    "dataFormat": "String",
+                    // Include host-side timestamps for every line of data transferred from the target RTT output
+                    "showTimestamps": true
+                    }
+                ],
+                "programBinary": "./mcu/target/xtensa-esp32s3-none-elf/release/esp32_partylight"
+            }
+        ]
+    }
+    ]
+}

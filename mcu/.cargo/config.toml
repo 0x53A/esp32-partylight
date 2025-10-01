@@ -2,11 +2,15 @@
 target = "xtensa-esp32s3-none-elf"
 
 [target.'cfg(target_arch = "xtensa")']
-runner    = "espflash flash --monitor --partition-table=partitions.csv"
+#runner    = "espflash flash --monitor --partition-table=partitions.csv"
+runner = "probe-rs run --chip esp32s3 --probe=303a:1001 --idf-partition-table=partitions.csv --speed 1000 --connect-under-reset"
 rustflags = [
   # GNU LD
   "-C", "link-arg=-Wl,-Tlinkall.x",
   "-C", "link-arg=-nostartfiles",
+
+  # for debugging
+  "-C", "force-frame-pointers=yes",
 
   # LLD
   # "-C", "link-arg=-Tlinkall.x",
@@ -15,7 +19,7 @@ rustflags = [
 
 
 [env]
-ESP_LOG = "error"
+ESP_LOG = "info"
 
 [unstable]
 build-std = ["alloc", "core"]

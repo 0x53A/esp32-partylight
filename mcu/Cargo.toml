@@ -12,25 +12,41 @@ bench = false
 
 
 [dependencies]
-embassy-executor = "0.7"
-embassy-sync = "0.7"
+
+common = { path = "../common" }
+
+# use cargo published versions of embassy
+embassy-executor = { version = "0.9" }
+embassy-sync = "0.7.2"
 embassy-time = "0.5.0"
-esp-hal = { version = "1.0.0-rc.0", features = ["esp32s3", "unstable", "rt"] }
-esp-backtrace = { version = "0.17.0", features = [
-    "esp32s3",
-    "panic-handler",
-    "exception-handler",
-    "println",
-] }
-esp-bootloader-esp-idf = "0.1.0"
-esp-println = { version = "0.15.0", features = ["esp32s3"] }
+embassy-futures = "0.1.2"
+
+# use latest git version of trouble
+trouble-host = { git = "https://github.com/embassy-rs/trouble", features = [ ] }
+
+# use latest git versions of esp-hal
+esp-hal = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "unstable", "rt"] }
+#esp-backtrace = { git = "https://github.com/esp-rs/esp-hal", features = [
+#    "esp32s3",
+#    "panic-handler",
+#    #"exception-handler",
+#    "println",
+#] }
+esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "log-04"] }
+esp-alloc = { git = "https://github.com/esp-rs/esp-hal" }
+esp-hal-embassy = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-rom-sys = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-radio = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "ble", "unstable"] }
+esp-preempt = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+
 critical-section = "1.2.0"
 embedded-graphics = "0.8.1"
 ssd1306 = "0.10.0"
 embedded-hal = "1.0.0"
 anyhow = { version = "1.0.99", default-features = false }
 heapless = "0.9.1"
-esp-alloc = "0.8.0"
 nb = "1.1.0"
 fugit = "0.3.7"
 ws2812-spi = { version = "0.5.1", features = [ "reset_single_transaction" ] }
@@ -38,13 +54,47 @@ smart-leds-trait = "0.3.1"
 smart-leds = "0.4.0"
 microfft = "0.6.0"
 libm = "0.2.15"
-esp-hal-embassy = { version = "0.9.0", features = ["esp32s3"] }
-esp-rom-sys = { version = "0.1.1", features = ["esp32s3"] }
 static_cell = "2.1.1"
+embedded-storage = "0.3.1"
+serde = { version = "1.0.225", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0.145", default-features = false, features = ["alloc"] }
+rand_core = "0.6.4"
+defmt = "1.0.1"
+log = "0.4.28"
+rtt-target = { version = "0.6.1", features = ["log"] }
+postcard = { version = "1.1.3", features = ["postcard-derive"] }
 
-#[patch.crates-io]
+
+
+[patch.crates-io]
 #ws2812-spi = { git = "https://github.com/0x53A/ws2812-spi-rs" }
 
+esp-hal = { git = "https://github.com/esp-rs/esp-hal" }
+esp-rom-sys = { git = "https://github.com/esp-rs/esp-hal" }
+esp-println = { git = "https://github.com/esp-rs/esp-hal" }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal" }
+esp-hal-embassy = { git = "https://github.com/esp-rs/esp-hal" }
+esp-preempt = { git = "https://github.com/esp-rs/esp-hal" }
+#esp-backtrace = { git = "https://github.com/esp-rs/esp-hal" }
+esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal" }
+esp-alloc = { git = "https://github.com/esp-rs/esp-hal" }
+esp-wifi-sys = { git = "https://github.com/esp-rs/esp-wifi-sys" }
+
+#embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-executor-macros = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "df10e8a6bc407544d29c234ed00bdec3e9caf837" }
+#embassy-futures = { git = "https://github.com/embassy-rs/embassy", branch = "main" }
+
+trouble-host = { git = "https://github.com/embassy-rs/trouble" }
+
+
+
+[features]
+default = ["bluetooth"]
+bluetooth = []
 
 
 [profile.release]
@@ -53,4 +103,5 @@ lto = true          # Enable Link Time Optimization
 codegen-units = 1   # Use single codegen unit for better optimization
 #strip = true        # strip symbols
 #panic = "abort"
-
+debug = 2
+strip = false
