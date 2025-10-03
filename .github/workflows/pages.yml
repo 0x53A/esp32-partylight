@@ -50,6 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Download and install Trunk binary
+        working-directory: app
         run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
 
       - name: Build # build
