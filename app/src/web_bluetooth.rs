@@ -9,6 +9,7 @@ const CONFIG_CHAR_UUID: &str = "fa57339a-e7e0-434e-9c98-93a15061e1ff";
 // OTA Service UUIDs
 const OTA_SERVICE_UUID: &str = "c6e7a9f0-1b34-4c5d-8f6e-2a3b4c5d6e7f";
 const OTA_CONTROL_CHAR_UUID: &str = "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80";
+const OTA_HASH_CHAR_UUID: &str = "a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8";
 const OTA_DATA_CHAR_UUID: &str = "e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091";
 const OTA_STATUS_CHAR_UUID: &str = "f9d0e2c3-4e67-7f80-b19c-5d6e7f809102";
 
@@ -17,6 +18,7 @@ pub struct Bluetooth {
     server: Option<JsValue>,
     cfg_char: Option<JsValue>,
     ota_control_char: Option<JsValue>,
+    ota_hash_char: Option<JsValue>,
     ota_data_char: Option<JsValue>,
     ota_status_char: Option<JsValue>,
 }
@@ -28,6 +30,7 @@ impl Bluetooth {
             server: None,
             cfg_char: None,
             ota_control_char: None,
+            ota_hash_char: None,
             ota_data_char: None,
             ota_status_char: None,
         }
@@ -180,6 +183,10 @@ impl Bluetooth {
                 let ota_control = Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
                 self.ota_control_char = Some(ota_control);
                 
+                console::log_1(&JsValue::from_str("web_bluetooth: getting OTA hash characteristic"));
+                let ota_hash = Self::get_characteristic(&ota_service, OTA_HASH_CHAR_UUID).await?;
+                self.ota_hash_char = Some(ota_hash);
+                
                 console::log_1(&JsValue::from_str("web_bluetooth: getting OTA data characteristic"));
                 let ota_data = Self::get_characteristic(&ota_service, OTA_DATA_CHAR_UUID).await?;
                 self.ota_data_char = Some(ota_data);
@@ -219,6 +226,8 @@ impl Bluetooth {
             Ok(ota_service) => {
                 let ota_control = Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
                 self.ota_control_char = Some(ota_control);
+                let ota_hash = Self::get_characteristic(&ota_service, OTA_HASH_CHAR_UUID).await?;
+                self.ota_hash_char = Some(ota_hash);
                 let ota_data = Self::get_characteristic(&ota_service, OTA_DATA_CHAR_UUID).await?;
                 self.ota_data_char = Some(ota_data);
                 let ota_status = Self::get_characteristic(&ota_service, OTA_STATUS_CHAR_UUID).await?;
@@ -292,11 +301,29 @@ impl Bluetooth {
         // clear characteristic as well
         self.cfg_char = None;
         self.ota_control_char = None;
+        self.ota_hash_char = None;
         self.ota_data_char = None;
         self.ota_status_char = None;
         self.server = None;
         self.device = None;
         console::log_1(&JsValue::from_str("web_bluetooth: disconnect complete"));
+        Ok(())
+    }
+
+    /// Set expected firmware hash (must be called before ota_begin)
+    pub async fn ota_set_hash(&self, hash: &Uint8Array) -> Result<(), JsValue> {
+        console::log_1(&JsValue::from_str("web_bluetooth: ota_set_hash start"));
+        if hash.length() != 32 {
+            return Err(JsValue::from_str("Hash must be exactly 32 bytes"));
+        }
+        
+        let char = self.ota_hash_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
+        
+        let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
+        let func: Function = write_fn.dyn_into()?;
+        let promise: Promise = func.call1(char, hash)?.dyn_into()?;
+        let _ = JsFuture::from(promise).await?;
+        console::log_1(&JsValue::from_str("web_bluetooth: ota_set_hash success"));
         Ok(())
     }
 

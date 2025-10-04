@@ -17,12 +17,14 @@ Example:
 import asyncio
 import sys
 import os
+import hashlib
 from bleak import BleakClient, BleakScanner
 from pathlib import Path
 
 # Service and characteristic UUIDs
 OTA_SERVICE_UUID = "c6e7a9f0-1b34-4c5d-8f6e-2a3b4c5d6e7f"
 OTA_CONTROL_CHAR_UUID = "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80"
+OTA_HASH_CHAR_UUID = "a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8"
 OTA_DATA_CHAR_UUID = "e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091"
 OTA_STATUS_CHAR_UUID = "f9d0e2c3-4e67-7f80-b19c-5d6e7f809102"
 
@@ -91,6 +93,10 @@ async def perform_ota_update(address, firmware_path):
     firmware_size = len(firmware_data)
     print(f"Firmware size: {firmware_size} bytes")
     
+    # Calculate SHA256 hash
+    firmware_hash = hashlib.sha256(firmware_data).digest()
+    print(f"Firmware SHA256: {firmware_hash.hex()}")
+    
     async with BleakClient(address) as client:
         print(f"Connected to {address}")
         
@@ -115,6 +121,11 @@ async def perform_ota_update(address, firmware_path):
             print("WARNING: OTA already in progress. Aborting previous update...")
             await client.write_gatt_char(OTA_CONTROL_CHAR_UUID, OTA_CMD_ABORT)
             await asyncio.sleep(1)
+        
+        # Send firmware hash
+        print("Sending firmware hash...")
+        await client.write_gatt_char(OTA_HASH_CHAR_UUID, firmware_hash)
+        await asyncio.sleep(0.5)
         
         # Begin OTA update
         print("Beginning OTA update...")

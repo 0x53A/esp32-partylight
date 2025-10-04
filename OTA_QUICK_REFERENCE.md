@@ -5,6 +5,7 @@
 ```
 OTA Service:        c6e7a9f0-1b34-4c5d-8f6e-2a3b4c5d6e7f
 OTA Control:        d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80
+OTA Hash:           a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8
 OTA Data:           e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091
 OTA Status:         f9d0e2c3-4e67-7f80-b19c-5d6e7f809102
 ```
@@ -31,9 +32,19 @@ OTA Status:         f9d0e2c3-4e67-7f80-b19c-5d6e7f809102
 ```python
 from bleak import BleakClient
 import asyncio
+import hashlib
 
 async def ota_update(address, firmware_data):
+    # Calculate SHA256 hash
+    firmware_hash = hashlib.sha256(firmware_data).digest()
+    
     async with BleakClient(address) as client:
+        # Send expected hash
+        await client.write_gatt_char(
+            "a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8",
+            firmware_hash
+        )
+        
         # Begin OTA
         await client.write_gatt_char(
             "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80",
@@ -62,8 +73,16 @@ async def ota_update(address, firmware_data):
 ```rust
 // In web app
 use js_sys::Uint8Array;
+use web_sys::crypto;
 
 async fn perform_ota(bt: &Bluetooth, firmware: Vec<u8>) -> Result<(), JsValue> {
+    // Calculate SHA256 hash (using Web Crypto API)
+    let hash_buffer = crypto::subtle::digest("SHA-256", &firmware).await?;
+    let hash = Uint8Array::new(&hash_buffer);
+    
+    // Send hash
+    bt.ota_set_hash(&hash).await?;
+    
     // Begin
     bt.ota_begin().await?;
     
@@ -73,7 +92,7 @@ async fn perform_ota(bt: &Bluetooth, firmware: Vec<u8>) -> Result<(), JsValue> {
         bt.ota_write_chunk(&array).await?;
     }
     
-    // Commit
+    // Commit (device will verify hash)
     bt.ota_commit().await?;
     
     Ok(())

@@ -35,6 +35,12 @@ The system uses a dual-partition scheme where one partition contains the running
   - `0x02` - Commit update (marks new firmware as bootable and restarts)
   - `0x03` - Abort update
 
+#### OTA Hash (UUID: `a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8`)
+- **Type**: Write, Read
+- **Description**: Expected SHA256 hash of firmware (32 bytes)
+- **Required**: Must be set before beginning OTA update
+- **Validation**: Device compares calculated hash with expected hash before committing
+
 #### OTA Data (UUID: `e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091`)
 - **Type**: Write only
 - **Description**: Receives firmware data chunks (up to 512 bytes per write)
@@ -51,12 +57,18 @@ The system uses a dual-partition scheme where one partition contains the running
 ## Update Procedure
 
 1. **Connect** to the device via Bluetooth
-2. **Write** `0x01` to OTA Control characteristic to begin the update
-3. **Write** firmware binary data in chunks to OTA Data characteristic
+2. **Calculate** SHA256 hash of the firmware binary
+3. **Write** the 32-byte hash to OTA Hash characteristic
+4. **Write** `0x01` to OTA Control characteristic to begin the update
+5. **Write** firmware binary data in chunks to OTA Data characteristic
    - Maximum 512 bytes per chunk
    - Wait for each write to complete before sending the next chunk
-4. **Write** `0x02` to OTA Control characteristic to commit the update
-5. The device will validate the firmware and reboot if successful
+6. **Write** `0x02` to OTA Control characteristic to commit the update
+7. The device will:
+   - Calculate the SHA256 hash of received firmware
+   - Compare with the expected hash from step 3
+   - If hashes match: mark firmware as bootable and reboot
+   - If hashes don't match: reject the update and return error status
 
 ### Error Handling
 
@@ -70,6 +82,7 @@ The system uses a dual-partition scheme where one partition contains the running
 The web application (`app/src/web_bluetooth.rs`) includes helper methods for OTA:
 
 ```rust
+async fn ota_set_hash(hash: &Uint8Array) -> Result<(), JsValue>
 async fn ota_begin() -> Result<(), JsValue>
 async fn ota_write_chunk(data: &Uint8Array) -> Result<(), JsValue>
 async fn ota_commit() -> Result<(), JsValue>
@@ -79,10 +92,10 @@ async fn ota_read_status() -> Result<u8, JsValue>
 
 ## Security Considerations
 
-- The current implementation does not include firmware signature verification
-- Consider adding authentication/encryption for production use
+✅ **Hash validation** - Firmware integrity is verified using SHA256 hash before committing
 - The OTA service is always advertised when Bluetooth is enabled
 - No rollback protection is implemented (device can be downgraded)
+- Consider adding BLE pairing/authentication for production use
 
 ## Example Usage (Pseudo-code)
 
@@ -90,11 +103,18 @@ async fn ota_read_status() -> Result<u8, JsValue>
 // Connect to device
 await bluetooth.connect();
 
-// Begin OTA
-await bluetooth.ota_begin();
-
 // Read firmware file
 const firmware = await readFile("firmware.bin");
+
+// Calculate SHA256 hash
+const hashBuffer = await crypto.subtle.digest('SHA-256', firmware);
+const hashArray = new Uint8Array(hashBuffer);
+
+// Send hash before beginning OTA
+await bluetooth.ota_set_hash(hashArray);
+
+// Begin OTA
+await bluetooth.ota_begin();
 
 // Send in chunks
 const CHUNK_SIZE = 512;

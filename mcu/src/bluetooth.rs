@@ -17,6 +17,7 @@ use crate::static_cell_init;
 // OTA-related imports
 use esp_bootloader_ota::{OtaUpdate, Partition};
 use embedded_storage::nor_flash::NorFlash;
+use sha2::{Sha256, Digest};
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
@@ -39,6 +40,8 @@ const OTA_STATUS_ERROR: u8 = 0x03;
 struct OtaState {
     ota_update: Option<OtaUpdate>,
     bytes_received: usize,
+    expected_hash: Option<[u8; 32]>,
+    hasher: Option<Sha256>,
 }
 
 // GATT Server definition
@@ -69,6 +72,11 @@ struct OtaService {
     #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_control", read, value = "OTA Control")]
     #[characteristic(uuid = "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80", write, read)]
     ota_control: u8,
+
+    /// OTA Hash characteristic - expected SHA256 hash of firmware (32 bytes)
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_hash", read, value = "OTA Expected Hash")]
+    #[characteristic(uuid = "a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8", write, read)]
+    ota_hash: heapless::Vec<u8, 32>,
 
     /// OTA Data characteristic - receives firmware data chunks
     #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_data", read, value = "OTA Data")]
@@ -183,6 +191,7 @@ async fn gatt_events_task(
     let config_version = &server.config_service.config_version;
     let config_data = &server.config_service.config_data;
     let ota_control = &server.ota_service.ota_control;
+    let ota_hash = &server.ota_service.ota_hash;
     let ota_data = &server.ota_service.ota_data;
     let ota_status = &server.ota_service.ota_status;
 
@@ -190,6 +199,8 @@ async fn gatt_events_task(
     let mut ota_state = OtaState {
         ota_update: None,
         bytes_received: 0,
+        expected_hash: None,
+        hasher: None,
     };
 
     let reason = loop {
@@ -213,6 +224,9 @@ async fn gatt_events_task(
                         } else if event.handle() == ota_control.handle {
                             let value = server.get(ota_control);
                             info!("[gatt] Read ota_control: {value:?}");
+                        } else if event.handle() == ota_hash.handle {
+                            let value = server.get(ota_hash);
+                            info!("[gatt] Read ota_hash: {value:?}");
                         } else if event.handle() == ota_status.handle {
                             let value = server.get(ota_status);
                             info!("[gatt] Read ota_status: {value:?}");
@@ -306,6 +320,22 @@ async fn gatt_events_task(
                                 warn!("[ota] Invalid OTA control data length");
                                 Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
                             }
+                        } else if event.handle() == ota_hash.handle {
+                            let byte_data = event.data();
+                            if byte_data.len() == 32 {
+                                let mut hash = [0u8; 32];
+                                hash.copy_from_slice(byte_data);
+                                ota_state.expected_hash = Some(hash);
+                                
+                                // Update the characteristic value
+                                server.set(ota_hash, &heapless::Vec::from_slice(byte_data).unwrap()).ok();
+                                
+                                info!("[ota] Expected hash set: {:02x?}", &hash[..8]);
+                                None
+                            } else {
+                                warn!("[ota] Invalid hash length: expected 32 bytes, got {}", byte_data.len());
+                                Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
+                            }
                         } else if event.handle() == ota_data.handle {
                             let byte_data = event.data();
                             info!("[ota] Received {} bytes of firmware data", byte_data.len());
@@ -363,6 +393,11 @@ fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
         return Err("OTA already in progress");
     }
 
+    // Check if hash is set
+    if ota_state.expected_hash.is_none() {
+        return Err("Expected hash not set");
+    }
+
     // Get the next OTA partition
     let ota_partition = match Partition::find_next_update_partition() {
         Some(p) => p,
@@ -379,6 +414,7 @@ fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
 
     ota_state.ota_update = Some(ota_update);
     ota_state.bytes_received = 0;
+    ota_state.hasher = Some(Sha256::new());
 
     Ok(())
 }
@@ -390,9 +426,17 @@ fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static 
         None => return Err("OTA not started"),
     };
 
+    let hasher = match ota_state.hasher.as_mut() {
+        Some(h) => h,
+        None => return Err("Hasher not initialized"),
+    };
+
     if let Err(_) = ota_update.write(data) {
         return Err("Failed to write OTA data");
     }
+
+    // Update hash with the data
+    hasher.update(data);
 
     ota_state.bytes_received += data.len();
     Ok(())
@@ -405,7 +449,37 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
         None => return Err("OTA not started"),
     };
 
+    let hasher = match ota_state.hasher.take() {
+        Some(h) => h,
+        None => return Err("Hasher not initialized"),
+    };
+
+    let expected_hash = match ota_state.expected_hash {
+        Some(h) => h,
+        None => return Err("Expected hash not set"),
+    };
+
     info!("[ota] Finalizing OTA update with {} bytes received", ota_state.bytes_received);
+
+    // Calculate the actual hash
+    let actual_hash = hasher.finalize();
+    let actual_hash_bytes: [u8; 32] = actual_hash.into();
+
+    // Compare hashes
+    if actual_hash_bytes != expected_hash {
+        error!("[ota] Hash mismatch!");
+        error!("[ota] Expected: {:02x?}", expected_hash);
+        error!("[ota] Actual:   {:02x?}", actual_hash_bytes);
+        
+        // Abort the update
+        if let Err(_) = ota_update.abort() {
+            error!("[ota] Failed to abort OTA update after hash mismatch");
+        }
+        
+        return Err("Hash validation failed");
+    }
+
+    info!("[ota] Hash validation successful");
 
     if let Err(_) = ota_update.complete() {
         return Err("Failed to complete OTA update");
@@ -425,6 +499,8 @@ fn abort_ota(ota_state: &mut OtaState) {
         info!("[ota] OTA update aborted");
     }
     ota_state.bytes_received = 0;
+    ota_state.hasher = None;
+    ota_state.expected_hash = None;
 }
 
 /// Create an advertiser to use to connect to a BLE Central, and wait for it to connect.
