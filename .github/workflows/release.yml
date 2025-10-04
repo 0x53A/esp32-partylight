@@ -1,0 +1,69 @@
+name: Build and Release Firmware
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install ESP Rust toolchain
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: true
+
+      - name: Install cargo-espflash
+        run: cargo install cargo-espflash
+
+      - name: Build firmware
+        working-directory: mcu
+        run: cargo build --release
+
+      - name: Generate firmware binary
+        working-directory: mcu
+        run: |
+          cargo espflash save-image \
+            --chip esp32s3 \
+            --merge \
+            --partition-table partitions.csv \
+            target/xtensa-esp32s3-none-elf/release/esp32_partylight \
+            esp32_partylight_firmware.bin
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="v$(date +'%Y%m%d-%H%M%S')"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Firmware Release ${{ steps.tag.outputs.tag }}"
+          body: |
+            Automated firmware build from commit ${{ github.sha }}
+            
+            ## Files:
+            - `esp32_partylight_firmware.bin` - Flash this to your ESP32-S3
+            
+            ## Flash instructions:
+            ```bash
+            esptool.py --chip esp32s3 write_flash 0x0 esp32_partylight_firmware.bin
+            ```
+          files: |
+            mcu/esp32_partylight_firmware.bin
+          draft: false
+          prerelease: false
