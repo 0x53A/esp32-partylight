@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(never_type)]
+//#![feature(generic_const_exprs)]
 
 extern crate alloc;
 use alloc::{boxed::Box, format};
@@ -12,7 +13,6 @@ use log::{LevelFilter, info};
 use core::{panic::PanicInfo, ptr::addr_of_mut};
 
 use esp_hal::{
-    clock::CpuClock,
     delay::Delay,
     dma::{DmaRxBuf, DmaTxBuf},
     dma_buffers,
@@ -30,11 +30,13 @@ use static_cell::StaticCell;
 
 use smart_leds::RGB8;
 
-use rtt_target::{rprintln, rtt_init_print};
+use rtt_target::{ChannelMode, rprintln, rtt_init_print};
 
 mod bluetooth;
 mod lights;
 pub mod util;
+
+mod ws2812;
 
 use lights::*;
 
@@ -57,7 +59,7 @@ fn panic(info: &PanicInfo) -> ! {
     }
 }
 
-static mut APP_CORE_STACK: Stack<8192> = Stack::new();
+static mut APP_CORE_STACK: Stack<{ 8 * 1024 }> = Stack::new();
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) -> ! {
@@ -73,11 +75,11 @@ async fn main(spawner: Spawner) -> ! {
 }
 
 async fn _main(spawner: Spawner) -> Result<!> {
-    esp_alloc::heap_allocator!(size: 72 * 1024);
+    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64_000);
 
     // ---------------------------------------------------------------------------
 
-    rtt_init_print!();
+    rtt_init_print!(ChannelMode::NoBlockTrim, 4 * 1024);
 
     static LOGGER: StaticCell<MultiLogger> = StaticCell::new();
     let logger = LOGGER.init(MultiLogger);
@@ -90,8 +92,7 @@ async fn _main(spawner: Spawner) -> Result<!> {
 
     // ---------------------------------------------------------------------------
 
-    let peripherals: Peripherals =
-        esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::_240MHz));
+    let peripherals: Peripherals = esp_hal::init(esp_hal::Config::default()); // Note: 'default()' runs at 80 MHz (for the esp32-s3)
 
     // let neopixel_data_pin = peripherals.GPIO48; // internal single LED
     let neopixel_data_pin = peripherals.GPIO21; // external 16x16 matrix
@@ -103,20 +104,30 @@ async fn _main(spawner: Spawner) -> Result<!> {
 
     let _delay = Delay::new();
 
-    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
-
-    // Initialize radio and RNG for Bluetooth
-    let _rng_source = TrngSource::new(peripherals.RNG, peripherals.ADC1);
-    let timg1 = TimerGroup::new(peripherals.TIMG1);
-    esp_preempt::start(timg1.timer0);
-
+    // declare signals for inter-task communication
     static CONFIG_SIGNAL: StaticCell<Signal<CriticalSectionRawMutex, common::config::AppConfig>> =
         StaticCell::new();
     let config_signal = &*CONFIG_SIGNAL.init(Signal::new());
 
-    // Start Bluetooth task
     let initial_config = common::config::AppConfig::default();
     config_signal.signal(initial_config.clone());
+
+    static NEOPIXEL_SIGNAL: StaticCell<
+        Signal<CriticalSectionRawMutex, Box<[RGB8; TOTAL_NEOPIXEL_LENGTH]>>,
+    > = StaticCell::new();
+    let neopixel_signal = &*NEOPIXEL_SIGNAL.init(Signal::new());
+
+    // Initialize RNG for Bluetooth and enable esp_preempt
+    let _rng_source = TrngSource::new(peripherals.RNG, peripherals.ADC1);
+    let timg1 = TimerGroup::new(peripherals.TIMG1);
+    esp_preempt::start(timg1.timer0);
+
+    // Start config processing task
+    spawner
+        .spawn(config_task(config_signal))
+        .map_err(|e| error_with_location!("Failed to spawn config task: {:?}", e))?;
+
+    // Start Bluetooth task
     info!("[main] Starting Bluetooth task ...");
     bluetooth::init_bluetooth(&spawner, peripherals.BT, config_signal, initial_config)
         .map_err(|e| error_with_location!("Failed to start Bluetooth task: {:?}", e))?;
@@ -125,17 +136,12 @@ async fn _main(spawner: Spawner) -> Result<!> {
     }
     info!("[main] Bluetooth task started");
 
-    // Start config processing task
-    spawner
-        .spawn(config_task(config_signal))
-        .map_err(|e| error_with_location!("Failed to spawn config task: {:?}", e))?;
-
     // Neopixel setup:
     //  DMA TX buffer size:
     //    256 LEDs * 3 bytes (r g b) * 4 (4 SPI bytes are used for one ws2812 byte) + 1 or 2 reset sequences of 140 bytes each
     //    2 * 140 + 256 * 3 * 4 = 3352
     //    ==> round up to 4 kB
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(1, 16 * 1024);
+    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(1, 4 * 1024);
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer)
         .map_err(|err| error_with_location!("Failed to create DMA RX buffer: {:?}", err))?;
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer)
@@ -149,22 +155,6 @@ async fn _main(spawner: Spawner) -> Result<!> {
         .with_mosi(neopixel_data_pin)
         .with_dma(peripherals.DMA_CH1)
         .with_buffers(dma_rx_buf, dma_tx_buf);
-
-    // start Neopixel task on the second core
-
-    static NEOPIXEL_SIGNAL: StaticCell<Signal<CriticalSectionRawMutex, Box<[RGB8]>>> =
-        StaticCell::new();
-    let neopixel_signal = &*NEOPIXEL_SIGNAL.init(Signal::new());
-
-    let _guard = cpu_control
-        .start_app_core(unsafe { &mut *addr_of_mut!(APP_CORE_STACK) }, move || {
-            static EXECUTOR: StaticCell<Executor> = StaticCell::new();
-            let executor = EXECUTOR.init(Executor::new());
-            executor.run(|spawner| {
-                spawner.spawn(neopixel_task(spi, neopixel_signal)).ok();
-            });
-        })
-        .unwrap();
 
     // // UART setup
     // let config = esp_hal::uart::Config::default().with_baudrate(115200);
@@ -182,14 +172,26 @@ async fn _main(spawner: Spawner) -> Result<!> {
         gpio5: peripherals.GPIO5,
     };
 
-    // Start audio processing task
-    spawner
-        .spawn(audio_processing_task(
-            i2s_peripherals,
-            neopixel_signal,
-            config_signal,
-        ))
-        .map_err(|e| error_with_location!("Failed to spawn audio processing task: {:?}", e))?;
+    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
+    let _guard = cpu_control
+        .start_app_core(unsafe { &mut *addr_of_mut!(APP_CORE_STACK) }, move || {
+            static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+            let executor = EXECUTOR.init(Executor::new());
+            executor.run(|spawner| {
+                // start Neopixel task
+                spawner.spawn(neopixel_task(spi, neopixel_signal)).ok();
+
+                // Start audio processing task
+                spawner
+                    .spawn(audio_processing_task(
+                        i2s_peripherals,
+                        neopixel_signal,
+                        config_signal,
+                    ))
+                    .ok();
+            });
+        })
+        .unwrap();
 
     // all processing is done in tasks
     loop {

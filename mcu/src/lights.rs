@@ -1,54 +1,59 @@
-use core::ops::Index;
-
 use alloc::{boxed::Box, format};
 use common::config::AppConfig;
 use common::config::ChannelConfig;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 
+use esp_hal::Async;
 use esp_hal::{dma_buffers, i2s::master::DataFormat, time::Rate};
 
 use anyhow::{Result, anyhow};
 
 use microfft::{Complex32, real::rfft_512};
 use smart_leds::RGB8;
-use smart_leds::SmartLedsWrite;
 
 use crate::error_with_location;
-
-type NeopixelT<'a> = ws2812_spi::prerendered::Ws2812<
-    'static,
-    esp_hal::spi::master::SpiDmaBus<'a, esp_hal::Blocking>,
->;
+use crate::static_buf;
+use crate::ws2812::WS2812_RESET_BYTES;
+use crate::ws2812::WS2812_Spi;
 
 const MATRIX_LENGTH: usize = 16 * 16;
 const MATRIX_WIDTH: usize = 16;
-const TOTAL_NEOPIXEL_LENGTH: usize = MATRIX_LENGTH;
+pub const TOTAL_NEOPIXEL_LENGTH: usize = MATRIX_LENGTH;
+
+const NEOPIXEL_MATRIX_BUFFER_SIZE: usize = 12 * TOTAL_NEOPIXEL_LENGTH + WS2812_RESET_BYTES;
 
 #[embassy_executor::task]
 pub async fn neopixel_task(
     spi: esp_hal::spi::master::SpiDmaBus<'static, esp_hal::Blocking>,
-    control: &'static Signal<CriticalSectionRawMutex, Box<[RGB8]>>,
+    pixel_signal: &'static Signal<CriticalSectionRawMutex, Box<[RGB8; TOTAL_NEOPIXEL_LENGTH]>>,
 ) -> ! {
     log::info!("Neopixel task started");
 
-    let neopixel_buffer = Box::leak(Box::new([0u8; 12 * TOTAL_NEOPIXEL_LENGTH + 140]));
-    let mut neopixel: NeopixelT = ws2812_spi::prerendered::Ws2812::new(spi, neopixel_buffer);
+    // Note: this moves the buffer from the stack to a static location
+    let neopixel_buffer = static_buf!(u8, NEOPIXEL_MATRIX_BUFFER_SIZE);
 
-    neopixel_demo(&mut neopixel);
+    let spi = spi.into_async();
+    let mut neopixel = WS2812_Spi {
+        spi,
+        buffer: neopixel_buffer,
+    };
+
+    neopixel_demo(&mut neopixel).await;
 
     loop {
-        let new_data = control.wait().await;
+        let new_data = pixel_signal.wait().await;
         let write_result = neopixel
-            .write(new_data)
+            .write_async(&*new_data)
+            .await
             .map_err(|err| error_with_location!("Failed to write to neopixel: {:?}", err));
         if let Err(e) = write_result {
-            log::info!("{e:?}");
+            log::error!("{e:?}");
         }
     }
 }
 
 #[embassy_executor::task]
-pub async fn config_task(config_signal: &'static Signal<CriticalSectionRawMutex, AppConfig>) -> ! {
+pub async fn config_task(_config_signal: &'static Signal<CriticalSectionRawMutex, AppConfig>) -> ! {
     loop {
         // let config = config_signal.wait().await;
         // log::info!("Received config update: {config:?}");
@@ -61,18 +66,19 @@ pub async fn config_task(config_signal: &'static Signal<CriticalSectionRawMutex,
     }
 }
 
-fn neopixel_demo(neopixel: &mut NeopixelT) {
+async fn neopixel_demo(neopixel: &mut WS2812_Spi<'_, '_, Async, NEOPIXEL_MATRIX_BUFFER_SIZE>) {
     let started = esp_hal::time::Instant::now();
     let mut i = 0;
     loop {
         // Demo: Three sine waves cycling through the 16x16 matrix
         // Red starts at 0, Blue at 1/3, Green at 2/3 of the cycle
-        let mut colors = [RGB8::new(0, 0, 0); 256];
+        let mut colors = [RGB8::new(0, 0, 0); TOTAL_NEOPIXEL_LENGTH];
 
         let time_offset = (i as f32) * 0.1; // Animation speed
 
-        for led_index in 0..256 {
-            let position = (led_index as f32) / 256.0 * 2.0 * core::f32::consts::PI;
+        for led_index in 0..TOTAL_NEOPIXEL_LENGTH {
+            let position =
+                (led_index as f32) / TOTAL_NEOPIXEL_LENGTH as f32 * 2.0 * core::f32::consts::PI;
 
             // Three sine waves offset by 2π/3 (120 degrees)
             let red_phase = position + time_offset;
@@ -87,7 +93,7 @@ fn neopixel_demo(neopixel: &mut NeopixelT) {
             colors[led_index] = RGB8::new(red, green, blue);
         }
 
-        if let Err(e) = neopixel.write(colors) {
+        if let Err(e) = neopixel.write_async(&colors).await {
             log::info!("Failed to write colors: {e:?}");
         }
         i += 1;
@@ -110,12 +116,12 @@ pub struct I2sPeripherals<'a> {
 #[embassy_executor::task]
 pub async fn audio_processing_task(
     i2s_peripherals: I2sPeripherals<'static>,
-    neopixel_signal: &'static Signal<CriticalSectionRawMutex, Box<[RGB8]>>,
+    neopixel_signal: &'static Signal<CriticalSectionRawMutex, Box<[RGB8; TOTAL_NEOPIXEL_LENGTH]>>,
     config_signal: &'static Signal<CriticalSectionRawMutex, AppConfig>,
 ) -> ! {
     let mut current_config = config_signal.wait().await;
 
-    const I2S_BUFFER_SIZE: usize = 16 * 4092;
+    const I2S_BUFFER_SIZE: usize = 16 * 4 * 1024;
 
     let (mut rx_buffer, rx_descriptors, _, _) = dma_buffers!(I2S_BUFFER_SIZE, 0);
 
@@ -138,22 +144,19 @@ pub async fn audio_processing_task(
 
     let mut transfer = i2s_rx.read_dma_circular(&mut rx_buffer).unwrap(); // Handle error as appropriate
 
-    let mut i2s_buffer = [0u8; I2S_BUFFER_SIZE];
+    let i2s_buffer = static_buf!(u8, I2S_BUFFER_SIZE);
 
     loop {
         // Check for config updates
         if let Some(new_config) = config_signal.try_take() {
-            log::info!("Updating config: {new_config:?}");
+            log::info!("Received updated config");
             current_config = new_config;
         }
 
         let available_i2s_bytes = match transfer.available() {
             Ok(bytes) => bytes,
             Err(err) => {
-                log::error!("Failed to get available data: {err:?}");
-                embassy_futures::yield_now().await;
-                let _ = transfer.pop(&mut i2s_buffer); // try to recover from an error by popping data
-                continue;
+                panic!("Failed to get available data: {err:?}");
             }
         };
 
@@ -161,7 +164,7 @@ pub async fn audio_processing_task(
         const SAMPLES_TO_TAKE: usize = 256;
 
         if available_i2s_bytes >= SAMPLES_TO_TAKE * SAMPLE_SIZE {
-            if let Err(err) = transfer.pop(&mut i2s_buffer) {
+            if let Err(err) = transfer.pop(i2s_buffer) {
                 log::error!("Failed to pop data from transfer: {err:?}");
                 embassy_futures::yield_now().await;
                 continue;
@@ -223,7 +226,7 @@ fn hann_window(buffer: &mut [f32]) {
 }
 //
 
-fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
+fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL_LENGTH]> {
     // static mut LAST_PRINT: u64 = 0;
     // static mut PROGRAM_START: Option<esp_hal::time::Instant> = None;
     // let program_start = unsafe {
@@ -282,7 +285,7 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
             }
         }
 
-        let mut buckets = spectrum[channel_cfg.start_index..=channel_cfg.end_index + 1]
+        let buckets = spectrum[channel_cfg.start_index..=channel_cfg.end_index + 1]
             .iter()
             .map(|c| norm_one_bucket(c, channel_cfg));
 
@@ -302,7 +305,7 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
 
     match &config.pattern {
         common::config::NeopixelMatrixPattern::Stripes(channels) => {
-            let mut channel_colors = channels.clone().map(|channel| {
+            let channel_colors = channels.clone().map(|channel| {
                 let f = calculate_channel(spectrum, &channel);
                 let clamped = f.min(1.0);
                 RGB8::new(
@@ -331,7 +334,7 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
             Box::new(colors)
         }
         common::config::NeopixelMatrixPattern::Bars(channels) => {
-            let mut channel_strengths = channels.clone().map(|channel| {
+            let channel_strengths = channels.clone().map(|channel| {
                 let f = calculate_channel(spectrum, &channel);
                 let clamped = f.min(1.0);
                 clamped
@@ -358,7 +361,7 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
             Box::new(colors)
         }
         common::config::NeopixelMatrixPattern::Quarters(channels) => {
-            let mut channel_colors = channels.clone().map(|channel| {
+            let channel_colors = channels.clone().map(|channel| {
                 let f = calculate_channel(spectrum, &channel);
                 let clamped = f.min(1.0);
                 RGB8::new(
@@ -370,7 +373,6 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8]> {
 
             // create a quartered pattern
             for i in 0..4 {
-                let channel_cfg = &channels[i];
                 for y in 0..8 {
                     for x in 0..8 {
                         let (offset_x, offset_y) = match i {

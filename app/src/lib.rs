@@ -38,7 +38,7 @@ struct AppState {
     state: Option<State>,
     painter: Option<Painter>,
     window: Option<Arc<Window>>,
-    my_app: crate::app::AliasApp,
+    my_app: crate::app::PartylightApp,
     repaint_signal: RepaintSignal,
 }
 
@@ -49,7 +49,7 @@ impl ApplicationHandler<UserEvent> for AppState {
                 .with_decorations(true)
                 .with_resizable(true)
                 .with_transparent(false)
-                .with_title("egui winit + wgpu example")
+                .with_title("Blindomator 9000 Pro Max Config Editor")
                 .with_inner_size(winit::dpi::PhysicalSize {
                     width: INITIAL_WIDTH,
                     height: INITIAL_HEIGHT,
@@ -209,7 +209,7 @@ fn _main(event_loop: EventLoop<UserEvent>) {
         state: None,
         painter: None,
         window: None,
-        my_app: crate::app::AliasApp::default(),
+        my_app: crate::app::PartylightApp::default(),
         repaint_signal,
     };
 

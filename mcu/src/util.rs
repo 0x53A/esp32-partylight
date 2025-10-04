@@ -49,3 +49,31 @@ impl log::Log for MultiLogger {
 
     fn flush(&self) {}
 }
+
+#[macro_use]
+mod static_cell_helpers {
+    #[macro_export]
+    macro_rules! static_cell_init {
+        ($ty:ty, $init:expr) => {{
+            {
+                static STATIC_CELL: ::static_cell::StaticCell<$ty> =
+                    ::static_cell::StaticCell::new();
+                STATIC_CELL.init($init)
+            }
+        }};
+    }
+
+    #[macro_export]
+    macro_rules! static_buf {
+        ($ty:ty, $size:expr) => {{
+            {
+                static mut BUF: [$ty; $size] = [0; $size];
+                #[allow(static_mut_refs)]
+                #[allow(unsafe_code)]
+                unsafe {
+                    &mut BUF
+                }
+            }
+        }};
+    }
+}

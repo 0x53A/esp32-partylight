@@ -14,12 +14,12 @@ use wasm_bindgen_futures::JsFuture;
 #[cfg(target_arch = "wasm32")]
 use crate::web_bluetooth as web_bt;
 
-pub struct AliasApp {
+pub struct PartylightApp {
     config: AppConfig,
     last_status: String,
 }
 
-impl Default for AliasApp {
+impl Default for PartylightApp {
     fn default() -> Self {
         Self {
             config: AppConfig {
@@ -71,7 +71,7 @@ impl Default for AliasApp {
     }
 }
 #[cfg(target_arch = "wasm32")]
-impl AliasApp {
+impl PartylightApp {
     pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Blindomator 9000 Pro Max Config Editor");
@@ -81,7 +81,7 @@ impl AliasApp {
                 if ui.add(Button::new("Connect")).clicked() {
                     self.last_status = "Connecting...".into();
                     let last_status = ui.ctx().clone();
-                    let app_ptr: *mut AliasApp = self as *mut _;
+                    let app_ptr: *mut PartylightApp = self as *mut _;
                     wasm_bindgen_futures::spawn_local(async move {
                         match web_bt::connect_to_device().await {
                             Ok(_) => {
@@ -103,7 +103,7 @@ impl AliasApp {
                 if ui.add(Button::new("Read from device")).clicked() {
                     self.last_status = "Reading...".into();
                     let last_status = ui.ctx().clone();
-                    let app_ptr: *mut AliasApp = self as *mut _;
+                    let app_ptr: *mut PartylightApp = self as *mut _;
                     wasm_bindgen_futures::spawn_local(async move {
                         match web_bt::read_config().await {
                             Ok(jsv) => {
@@ -134,7 +134,7 @@ impl AliasApp {
                 if ui.add(Button::new("Write to device")).clicked() {
                     self.last_status = "Writing...".into();
                     let last_status = ui.ctx().clone();
-                    let app_ptr: *mut AliasApp = self as *mut _;
+                    let app_ptr: *mut PartylightApp = self as *mut _;
                     let bytes = match self.config.to_bytes::<1024>() {
                         Ok(b) => b,
                         Err(e) => {
@@ -390,7 +390,7 @@ impl AliasApp {
 
 // Provide a native (non-wasm) UI stub so the app can still run natively.
 #[cfg(not(target_arch = "wasm32"))]
-impl AliasApp {
+impl PartylightApp {
     pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Blindomator 9000 Pro Max Config Editor (WASM only)");

@@ -952,7 +952,6 @@ dependencies = [
  "ssd1306",
  "static_cell",
  "trouble-host",
- "ws2812-spi",
 ]
 
 [[package]]
@@ -2161,16 +2160,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21a0236b59786fed61e2a80582dd500fe61f18b5dca67a4a067d0bc9039339cf"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "ws2812-spi"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2fd98e2b649252eced2ec3aa8d5048e7d2ac294276b0567939bbf47741f9934"
-dependencies = [
- "embedded-hal 1.0.0",
- "smart-leds-trait",
 ]
 
 [[package]]

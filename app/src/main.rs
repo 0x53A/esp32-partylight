@@ -10,7 +10,7 @@ mod web_bluetooth;
 use egui::{FontData, FontDefinitions, FontFamily};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl eframe::App for app::AliasApp {
+impl eframe::App for app::PartylightApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.ui(ctx);
     }
@@ -41,7 +41,7 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(|cc| {
             add_fonts_to_ctx(&cc.egui_ctx);
-            Ok(Box::new(app::AliasApp::default()))
+            Ok(Box::new(app::PartylightApp::default()))
         }),
     )
 }
@@ -83,7 +83,7 @@ fn main() {
                 web_options,
                 Box::new(|cc| {
                     add_fonts_to_ctx(&cc.egui_ctx);
-                    Ok(Box::new(app::AliasApp::default()))
+                    Ok(Box::new(app::PartylightApp::default()))
                 }),
             )
             .await;

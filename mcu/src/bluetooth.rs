@@ -10,8 +10,9 @@ use esp_hal::peripherals::BT;
 use esp_radio::ble::controller::BleConnector;
 use log::{error, info, warn};
 use rand_core::{CryptoRng, RngCore};
-use static_cell::StaticCell;
 use trouble_host::prelude::*;
+
+use crate::static_cell_init;
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
@@ -160,12 +161,18 @@ async fn gatt_events_task(
                         None
                     }
                     GattEvent::Write(event) => {
+                        info!("[gatt] Write event: {:?}", event.handle());
                         if event.handle() == config_data.handle {
                             let byte_data = event.data();
+                            info!(
+                                "[gatt] Write to config_data with length {}",
+                                byte_data.len()
+                            );
                             if let Ok(new_config) = AppConfig::from_bytes(byte_data) {
-                                info!("[gatt] Received config: {:?}", new_config);
+                                info!("[gatt] Valid Data in config data");
 
                                 // Signal the config update to other tasks
+                                info!("[gatt] Signaling config update");
                                 config_signal.signal(new_config);
 
                                 // Update the characteristic value
@@ -175,17 +182,22 @@ async fn gatt_events_task(
                                         &heapless::Vec::from_slice(byte_data).unwrap(),
                                     )
                                     .unwrap();
+
+                                info!("[gatt] Updated config_data characteristic");
                                 None
                             } else {
-                                warn!("[gatt] Invalid UTF-8 in config data");
+                                warn!("[gatt] Invalid Data in config data");
                                 Some(AttErrorCode::VALUE_NOT_ALLOWED)
                             }
                         } else {
+                            info!("[gatt] Write to unknown handle");
                             None
                         }
                     }
                     _ => None,
                 };
+
+                info!("[gatt] replying with {:?}", result);
 
                 let reply_result = if let Some(code) = result {
                     event.reject(code)
@@ -199,7 +211,7 @@ async fn gatt_events_task(
             }
             _ => {} // ignore other Gatt Connection Events
         }
-        embassy_futures::yield_now().await
+        embassy_futures::yield_now().await;
     };
     info!("[gatt] disconnected: {reason:?}");
     Ok(())
@@ -279,8 +291,7 @@ async fn bluetooth_task(
 ) {
     info!("Bluetooth Task started");
 
-    static RADIO: StaticCell<esp_radio::Controller<'static>> = StaticCell::new();
-    let radio = RADIO.init(esp_radio::init().unwrap());
+    let radio = static_cell_init!(esp_radio::Controller<'static>, esp_radio::init().unwrap());
 
     let mut rng = esp_hal::rng::Trng::try_new().unwrap();
 
