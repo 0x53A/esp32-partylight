@@ -23,10 +23,7 @@
 #[cfg(feature = "font_ubuntu_light")]
 pub const UBUNTU_LIGHT: &[u8] = include_bytes!("../fonts/Ubuntu-Light.ttf");
 
-#[cfg(feature = "font_ubuntu_light_compressed")]
-pub static UBUNTU_LIGHT: Option<Box<[u8]>> = None;
-#[cfg(feature = "font_ubuntu_light_compressed")]
-pub const UBUNTU_LIGHT_GZIP: &[u8] = include_bytes!("../fonts/Ubuntu-Light.ttf.gz");
+pub const CYNATAR: &[u8] = include_bytes!("../fonts/Cynatar.otf");
 
 #[cfg(feature = "font_hack")]
 pub const HACK: &[u8] = include_bytes!("../fonts/Hack-Regular.ttf");

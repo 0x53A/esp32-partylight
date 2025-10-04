@@ -74,7 +74,14 @@ impl Default for PartylightApp {
 impl PartylightApp {
     pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Blindomator 9000 Pro Max Config Editor");
+            ui.label(
+                egui::RichText::new("Blindomator 9000 Pro Max Config Editor")
+                    .font(egui::FontId::new(
+                        28.0,
+                        egui::FontFamily::Name(std::sync::Arc::from("Cynatar")),
+                    ))
+                    .strong(),
+            );
             ui.label(&self.last_status);
 
             ui.horizontal(|ui| {
@@ -393,7 +400,14 @@ impl PartylightApp {
 impl PartylightApp {
     pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Blindomator 9000 Pro Max Config Editor (WASM only)");
+            ui.label(
+                egui::RichText::new("Blindomator 9000 Pro Max Config Editor (WASM only)")
+                    .font(egui::FontId::new(
+                        22.0,
+                        egui::FontFamily::Name(std::sync::Arc::from("Cynatar")),
+                    ))
+                    .strong(),
+            );
             ui.label("Bluetooth functions are only available when compiled to WebAssembly.");
 
             ui.separator();

@@ -2,7 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 mod app;
-mod font_wasm;
 mod fonts;
 #[cfg(target_arch = "wasm32")]
 mod web_bluetooth;
@@ -68,14 +67,6 @@ fn main() {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
-        #[cfg(feature = "font_ubuntu_light_compressed")]
-        {
-            let decompressed_font =
-                crate::font_wasm::decompress_gzip(crate::fonts::UBUNTU_LIGHT_GZIP)
-                    .await
-                    .expect("Failed to decompress font");
-            crate::fonts::UBUNTU_LIGHT.copy_from_slice(&decompressed_font);
-        }
 
         let start_result = eframe::WebRunner::new()
             .start(
@@ -134,10 +125,9 @@ pub fn add_fonts_to_ctx(egui_ctx: &egui::Context) {
         Arc::new(FontData::from_static(crate::fonts::UBUNTU_LIGHT)),
     );
 
-    #[cfg(feature = "font_ubuntu_light_compressed")]
     font_data.insert(
-        "Ubuntu-Light".to_owned(),
-        Arc::new(FontData::from_owned(crate::fonts::UBUNTU_LIGHT.to_vec())),
+        "Cynatar".to_owned(),
+        Arc::new(FontData::from_static(crate::fonts::CYNATAR)),
     );
 
     // // Bigger emojis, and more. <http://jslegers.github.io/emoji-icon-font/>:
@@ -180,6 +170,11 @@ pub fn add_fonts_to_ctx(egui_ctx: &egui::Context) {
             // "NotoEmoji-Regular".to_owned(),
             // "emoji-icon-font".to_owned(),
         ],
+    );
+
+    families.insert(
+        FontFamily::Name("Cynatar".into()),
+        vec!["Cynatar".to_owned()],
     );
 
     let fd = FontDefinitions {
