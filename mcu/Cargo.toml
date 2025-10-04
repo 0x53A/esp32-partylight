@@ -33,6 +33,8 @@ esp-hal = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "u
 #    "println",
 #] }
 esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-bootloader-ota = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-bootloader-ota = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
 esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "log-04"] }
 esp-alloc = { git = "https://github.com/esp-rs/esp-hal" }
 esp-hal-embassy = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }

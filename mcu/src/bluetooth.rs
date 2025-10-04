@@ -14,16 +14,38 @@ use trouble_host::prelude::*;
 
 use crate::static_cell_init;
 
+// OTA-related imports
+use esp_bootloader_ota::{OtaUpdate, Partition};
+use embedded_storage::nor_flash::NorFlash;
+
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 
 /// Max number of L2CAP channels.
 const L2CAP_CHANNELS_MAX: usize = 2; // Signal + att
 
+/// OTA control commands
+const OTA_CMD_BEGIN: u8 = 0x01;
+const OTA_CMD_COMMIT: u8 = 0x02;
+const OTA_CMD_ABORT: u8 = 0x03;
+
+/// OTA status codes
+const OTA_STATUS_IDLE: u8 = 0x00;
+const OTA_STATUS_IN_PROGRESS: u8 = 0x01;
+const OTA_STATUS_SUCCESS: u8 = 0x02;
+const OTA_STATUS_ERROR: u8 = 0x03;
+
+/// OTA state
+struct OtaState {
+    ota_update: Option<OtaUpdate>,
+    bytes_received: usize,
+}
+
 // GATT Server definition
 #[gatt_server]
 struct Server {
     config_service: ConfigService,
+    ota_service: OtaService,
 }
 
 ///
@@ -37,6 +59,27 @@ struct ConfigService {
     #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "config_data", read, value = "Configuration Data")]
     #[characteristic(uuid = "fa57339a-e7e0-434e-9c98-93a15061e1ff", write, read)]
     config_data: heapless::Vec<u8, 200>,
+}
+
+/// OTA Service for firmware updates over Bluetooth
+#[gatt_service(uuid = "c6e7a9f0-1b34-4c5d-8f6e-2a3b4c5d6e7f")]
+struct OtaService {
+    /// OTA Control characteristic - used to start, commit, or abort OTA
+    /// Write: 0x01 = begin OTA, 0x02 = commit, 0x03 = abort
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_control", read, value = "OTA Control")]
+    #[characteristic(uuid = "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80", write, read)]
+    ota_control: u8,
+
+    /// OTA Data characteristic - receives firmware data chunks
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_data", read, value = "OTA Data")]
+    #[characteristic(uuid = "e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091", write)]
+    ota_data: heapless::Vec<u8, 512>,
+
+    /// OTA Status characteristic - reports current status
+    /// 0x00 = idle, 0x01 = in progress, 0x02 = success, 0x03 = error
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_status", read, value = "OTA Status")]
+    #[characteristic(uuid = "f9d0e2c3-4e67-7f80-b19c-5d6e7f809102", read, notify)]
+    ota_status: u8,
 }
 
 /// Run the BLE stack.
@@ -139,6 +182,16 @@ async fn gatt_events_task(
 ) -> Result<(), Error> {
     let config_version = &server.config_service.config_version;
     let config_data = &server.config_service.config_data;
+    let ota_control = &server.ota_service.ota_control;
+    let ota_data = &server.ota_service.ota_data;
+    let ota_status = &server.ota_service.ota_status;
+
+    // Initialize OTA state
+    let mut ota_state = OtaState {
+        ota_update: None,
+        bytes_received: 0,
+    };
+
     let reason = loop {
         match conn.next().await {
             GattConnectionEvent::Disconnected { reason } => break reason,
@@ -157,6 +210,12 @@ async fn gatt_events_task(
                         } else if event.handle() == config_data.handle {
                             let value = server.get(config_data);
                             info!("[gatt] Read config_data: {value:?}");
+                        } else if event.handle() == ota_control.handle {
+                            let value = server.get(ota_control);
+                            info!("[gatt] Read ota_control: {value:?}");
+                        } else if event.handle() == ota_status.handle {
+                            let value = server.get(ota_status);
+                            info!("[gatt] Read ota_status: {value:?}");
                         }
                         None
                     }
@@ -189,6 +248,80 @@ async fn gatt_events_task(
                                 warn!("[gatt] Invalid Data in config data");
                                 Some(AttErrorCode::VALUE_NOT_ALLOWED)
                             }
+                        } else if event.handle() == ota_control.handle {
+                            let byte_data = event.data();
+                            if byte_data.len() == 1 {
+                                let cmd = byte_data[0];
+                                info!("[gatt] OTA control command: {}", cmd);
+                                
+                                match cmd {
+                                    OTA_CMD_BEGIN => {
+                                        info!("[ota] Beginning OTA update");
+                                        match begin_ota(&mut ota_state) {
+                                            Ok(_) => {
+                                                server.set(ota_control, &OTA_CMD_BEGIN).ok();
+                                                server.set(ota_status, &OTA_STATUS_IN_PROGRESS).ok();
+                                                info!("[ota] OTA update started successfully");
+                                                None
+                                            }
+                                            Err(e) => {
+                                                error!("[ota] Failed to begin OTA: {:?}", e);
+                                                server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                                Some(AttErrorCode::UNLIKELY_ERROR)
+                                            }
+                                        }
+                                    }
+                                    OTA_CMD_COMMIT => {
+                                        info!("[ota] Committing OTA update");
+                                        match commit_ota(&mut ota_state) {
+                                            Ok(_) => {
+                                                server.set(ota_control, &OTA_CMD_COMMIT).ok();
+                                                server.set(ota_status, &OTA_STATUS_SUCCESS).ok();
+                                                info!("[ota] OTA committed, system will restart");
+                                                // Give time for response to be sent
+                                                Timer::after_millis(100).await;
+                                                esp_hal::reset::software_reset();
+                                                None
+                                            }
+                                            Err(e) => {
+                                                error!("[ota] Failed to commit OTA: {:?}", e);
+                                                server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                                Some(AttErrorCode::UNLIKELY_ERROR)
+                                            }
+                                        }
+                                    }
+                                    OTA_CMD_ABORT => {
+                                        info!("[ota] Aborting OTA update");
+                                        abort_ota(&mut ota_state);
+                                        server.set(ota_control, &OTA_CMD_ABORT).ok();
+                                        server.set(ota_status, &OTA_STATUS_IDLE).ok();
+                                        None
+                                    }
+                                    _ => {
+                                        warn!("[ota] Unknown OTA control command: {}", cmd);
+                                        Some(AttErrorCode::VALUE_NOT_ALLOWED)
+                                    }
+                                }
+                            } else {
+                                warn!("[ota] Invalid OTA control data length");
+                                Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
+                            }
+                        } else if event.handle() == ota_data.handle {
+                            let byte_data = event.data();
+                            info!("[ota] Received {} bytes of firmware data", byte_data.len());
+                            
+                            match write_ota_data(&mut ota_state, byte_data) {
+                                Ok(_) => {
+                                    info!("[ota] Wrote {} bytes (total: {})", byte_data.len(), ota_state.bytes_received);
+                                    None
+                                }
+                                Err(e) => {
+                                    error!("[ota] Failed to write OTA data: {:?}", e);
+                                    server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                    abort_ota(&mut ota_state);
+                                    Some(AttErrorCode::UNLIKELY_ERROR)
+                                }
+                            }
                         } else {
                             info!("[gatt] Write to unknown handle");
                             None
@@ -213,8 +346,85 @@ async fn gatt_events_task(
         }
         embassy_futures::yield_now().await;
     };
+    
+    // Clean up OTA state on disconnect
+    if ota_state.ota_update.is_some() {
+        warn!("[ota] Connection closed with OTA in progress, aborting");
+        abort_ota(&mut ota_state);
+    }
+    
     info!("[gatt] disconnected: {reason:?}");
     Ok(())
+}
+
+/// Begin OTA update by initializing the update partition
+fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
+    if ota_state.ota_update.is_some() {
+        return Err("OTA already in progress");
+    }
+
+    // Get the next OTA partition
+    let ota_partition = match Partition::find_next_update_partition() {
+        Some(p) => p,
+        None => return Err("No OTA partition found"),
+    };
+
+    info!("[ota] Found OTA partition at 0x{:x}, size: {}", ota_partition.offset(), ota_partition.size());
+
+    // Create OTA update handle
+    let ota_update = match OtaUpdate::begin(ota_partition) {
+        Ok(u) => u,
+        Err(_) => return Err("Failed to begin OTA update"),
+    };
+
+    ota_state.ota_update = Some(ota_update);
+    ota_state.bytes_received = 0;
+
+    Ok(())
+}
+
+/// Write firmware data chunk to OTA partition
+fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static str> {
+    let ota_update = match ota_state.ota_update.as_mut() {
+        Some(u) => u,
+        None => return Err("OTA not started"),
+    };
+
+    if let Err(_) = ota_update.write(data) {
+        return Err("Failed to write OTA data");
+    }
+
+    ota_state.bytes_received += data.len();
+    Ok(())
+}
+
+/// Commit OTA update and mark it as bootable
+fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
+    let ota_update = match ota_state.ota_update.take() {
+        Some(u) => u,
+        None => return Err("OTA not started"),
+    };
+
+    info!("[ota] Finalizing OTA update with {} bytes received", ota_state.bytes_received);
+
+    if let Err(_) = ota_update.complete() {
+        return Err("Failed to complete OTA update");
+    }
+
+    info!("[ota] OTA update completed successfully");
+    Ok(())
+}
+
+/// Abort OTA update and clean up
+fn abort_ota(ota_state: &mut OtaState) {
+    if let Some(ota_update) = ota_state.ota_update.take() {
+        // Abort the update
+        if let Err(_) = ota_update.abort() {
+            error!("[ota] Failed to abort OTA update");
+        }
+        info!("[ota] OTA update aborted");
+    }
+    ota_state.bytes_received = 0;
 }
 
 /// Create an advertiser to use to connect to a BLE Central, and wait for it to connect.
