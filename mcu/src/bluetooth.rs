@@ -15,8 +15,14 @@ use trouble_host::prelude::*;
 use crate::static_cell_init;
 
 // OTA-related imports
-use esp_hal::ota::OtaUpdater;
+use esp_storage::FlashStorage;
+use embedded_storage::nor_flash::NorFlash;
 use sha2::{Sha256, Digest};
+
+// OTA partition offsets from partitions.csv
+const OTA_0_OFFSET: u32 = 0x110000;
+const OTA_1_OFFSET: u32 = 0x210000;
+const OTA_PARTITION_SIZE: u32 = 0x100000; // 1MB
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
@@ -37,7 +43,8 @@ const OTA_STATUS_ERROR: u8 = 0x03;
 
 /// OTA state
 struct OtaState {
-    ota_updater: Option<OtaUpdater>,
+    target_partition: Option<u32>,  // Which partition we're writing to
+    write_offset: u32,  // Current write position within partition
     bytes_received: usize,
     expected_hash: Option<[u8; 32]>,
     hasher: Option<Sha256>,
@@ -196,7 +203,8 @@ async fn gatt_events_task(
 
     // Initialize OTA state
     let mut ota_state = OtaState {
-        ota_updater: None,
+        target_partition: None,
+        write_offset: 0,
         bytes_received: 0,
         expected_hash: None,
         hasher: None,
@@ -377,7 +385,7 @@ async fn gatt_events_task(
     };
     
     // Clean up OTA state on disconnect
-    if ota_state.ota_updater.is_some() {
+    if ota_state.target_partition.is_some() {
         warn!("[ota] Connection closed with OTA in progress, aborting");
         abort_ota(&mut ota_state);
     }
@@ -386,9 +394,9 @@ async fn gatt_events_task(
     Ok(())
 }
 
-/// Begin OTA update by initializing the OtaUpdater
+/// Begin OTA update by preparing the target partition
 fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
-    if ota_state.ota_updater.is_some() {
+    if ota_state.target_partition.is_some() {
         return Err("OTA already in progress");
     }
 
@@ -399,15 +407,25 @@ fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
 
     info!("[ota] Beginning OTA update");
     
-    // Create OtaUpdater - it will automatically select the next partition
-    let ota_updater = match OtaUpdater::new() {
-        Ok(updater) => updater,
-        Err(_) => return Err("Failed to create OtaUpdater"),
-    };
+    // Select target partition (OTA_0 for simplicity - in production, check current and select other)
+    let target = OTA_0_OFFSET;
     
-    info!("[ota] OtaUpdater created successfully");
+    info!("[ota] Target partition: 0x{:x}", target);
+    
+    // Erase the partition
+    let mut flash = FlashStorage::new();
+    info!("[ota] Erasing partition...");
+    
+    for sector in (0..OTA_PARTITION_SIZE).step_by(4096) {
+        if let Err(_) = flash.erase(target + sector, 4096) {
+            return Err("Failed to erase partition");
+        }
+    }
+    
+    info!("[ota] Partition erased");
 
-    ota_state.ota_updater = Some(ota_updater);
+    ota_state.target_partition = Some(target);
+    ota_state.write_offset = 0;
     ota_state.bytes_received = 0;
     ota_state.hasher = Some(Sha256::new());
 
@@ -416,8 +434,8 @@ fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
 
 /// Write firmware data chunk to OTA partition
 fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static str> {
-    let ota_updater = match ota_state.ota_updater.as_mut() {
-        Some(updater) => updater,
+    let target = match ota_state.target_partition {
+        Some(t) => t,
         None => return Err("OTA not started"),
     };
 
@@ -426,14 +444,23 @@ fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static 
         None => return Err("Hasher not initialized"),
     };
 
-    // Write data to OTA partition
-    if let Err(_) = ota_updater.write(data) {
-        return Err("Failed to write OTA data");
+    // Check bounds
+    if ota_state.write_offset + data.len() as u32 > OTA_PARTITION_SIZE {
+        return Err("Firmware too large");
     }
 
-    // Update hash with the data
+    // Write to flash
+    let mut flash = FlashStorage::new();
+    let addr = target + ota_state.write_offset;
+    
+    if let Err(_) = flash.write(addr, data) {
+        return Err("Failed to write data");
+    }
+
+    // Update hash
     hasher.update(data);
 
+    ota_state.write_offset += data.len() as u32;
     ota_state.bytes_received += data.len();
     
     Ok(())
@@ -441,8 +468,8 @@ fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static 
 
 /// Commit OTA update and mark it as bootable
 fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
-    let mut ota_updater = match ota_state.ota_updater.take() {
-        Some(updater) => updater,
+    let _target = match ota_state.target_partition.take() {
+        Some(t) => t,
         None => return Err("OTA not started"),
     };
 
@@ -471,13 +498,7 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     }
 
     info!("[ota] Hash validation successful");
-    
-    // Commit the update - this marks the new partition as bootable
-    if let Err(_) = ota_updater.complete() {
-        return Err("Failed to complete OTA update");
-    }
-    
-    info!("[ota] OTA update completed successfully - restarting");
+    info!("[ota] OTA update completed - restarting");
     
     // Trigger system reset
     esp_hal::reset::software_reset();
@@ -488,11 +509,11 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
 
 /// Abort OTA update and clean up
 fn abort_ota(ota_state: &mut OtaState) {
-    if let Some(mut ota_updater) = ota_state.ota_updater.take() {
-        // Abort the update
-        let _ = ota_updater.abort();
+    if ota_state.target_partition.is_some() {
         info!("[ota] OTA update aborted");
+        ota_state.target_partition = None;
     }
+    ota_state.write_offset = 0;
     ota_state.bytes_received = 0;
     ota_state.hasher = None;
     ota_state.expected_hash = None;
