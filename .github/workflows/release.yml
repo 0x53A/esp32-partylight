@@ -1,0 +1,75 @@
+name: Build and Release Firmware
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install ESP Rust toolchain
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: false
+
+      - name: Install cargo-espflash
+        run: cargo install cargo-espflash
+
+      - name: Build firmware
+        working-directory: mcu
+        run: cargo build --release
+
+      - name: Copy ELF file
+        working-directory: mcu
+        run: |
+          cp target/xtensa-esp32s3-none-elf/release/esp32_partylight esp32_partylight.elf
+
+      - name: Generate firmware binary
+        working-directory: mcu
+        run: |
+          cargo espflash save-image \
+            --chip esp32s3 \
+            --partition-table partitions.csv \
+            target/xtensa-esp32s3-none-elf/release/esp32_partylight \
+            esp32_partylight_firmware.bin
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          VERSION=$(grep '^version = ' mcu/Cargo.toml | head -n1 | cut -d'"' -f2)
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          TAG="v${VERSION}.${COMMIT_COUNT}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Firmware Release ${{ steps.tag.outputs.tag }}"
+          body: |
+            Automated firmware build from commit ${{ github.sha }}
+            
+            ## Files:
+            - `esp32_partylight_firmware.bin` - Flash this to your ESP32-S3
+            - `esp32_partylight.elf` - ELF file for debugging
+            
+            ## Flash instructions:
+            Flash the firmware at offset 0x10000 using the [ESP Web Flasher](https://espressif.github.io/esptool-js/).
+          files: |
+            mcu/esp32_partylight_firmware.bin
+            mcu/esp32_partylight.elf
+          draft: false
+          prerelease: true
