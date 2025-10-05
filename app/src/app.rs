@@ -1,12 +1,10 @@
 use common::config::*;
 use egui::{self, Button, Color32, FontId, FontFamily};
-use std::time::Duration;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-#[cfg(target_arch = "wasm32")]
 #[cfg(target_arch = "wasm32")]
 use js_sys;
 
@@ -19,8 +17,6 @@ use wasm_bindgen::JsCast;
 // Import JS helper functions as returning Promises; we'll await them via JsFuture.
 #[cfg(target_arch = "wasm32")]
 use crate::web_bluetooth::Bluetooth;
-#[cfg(target_arch = "wasm32")]
-use gloo_timers::future::IntervalStream;
 #[cfg(target_arch = "wasm32")]
 use futures_util::StreamExt;
 
@@ -497,7 +493,7 @@ impl PartylightApp {
                                                     
                                                     // Create change handler
                                                     let onchange = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::Event| {
-                                                        use web_sys::{FileReader, File};
+                                                        use web_sys::FileReader;
                                                         
                                                         if let Some(target) = event.target() {
                                                             if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
@@ -515,10 +511,12 @@ impl PartylightApp {
                                                                             if let Ok(reader) = FileReader::new() {
                                                                                 let messages_read = messages_clone.clone();
                                                                                 let ctx_read = ctx_clone.clone();
+                                                                                let reader_rc = Rc::new(reader);
+                                                                                let reader_clone = reader_rc.clone();
                                                                                 
                                                                                 let onload = wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::ProgressEvent| {
                                                                                     // File read complete - perform OTA
-                                                                                    if let Ok(result) = reader.result() {
+                                                                                    if let Ok(result) = reader_clone.result() {
                                                                                         if let Ok(array_buffer) = result.dyn_into::<js_sys::ArrayBuffer>() {
                                                                                             let firmware_data = js_sys::Uint8Array::new(&array_buffer);
                                                                                             let firmware_len = firmware_data.length();
@@ -532,7 +530,7 @@ impl PartylightApp {
                                                                                             spawn_local(async move {
                                                                                                 // Calculate SHA256 hash using Web Crypto API
                                                                                                 let hash_result = async {
-                                                                                                    use web_sys::{window, SubtleCrypto};
+                                                                                                    use web_sys::window;
                                                                                                     use wasm_bindgen::JsCast;
                                                                                                     use wasm_bindgen_futures::JsFuture;
                                                                                                     
@@ -623,10 +621,10 @@ impl PartylightApp {
                                                                                     }
                                                                                 }) as Box<dyn FnMut(_)>);
                                                                                 
-                                                                                reader.set_onload(Some(onload.as_ref().unchecked_ref()));
+                                                                                reader_rc.set_onload(Some(onload.as_ref().unchecked_ref()));
                                                                                 onload.forget();
                                                                                 
-                                                                                let _ = reader.read_as_array_buffer(&file);
+                                                                                let _ = reader_rc.read_as_array_buffer(&file);
                                                                             }
                                                                         }
                                                                     }
