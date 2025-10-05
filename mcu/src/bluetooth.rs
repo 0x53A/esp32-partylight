@@ -16,6 +16,7 @@ use crate::static_cell_init;
 
 // OTA-related imports
 use esp_bootloader_esp_idf::ota_updater::OtaUpdater;
+use esp_storage::FlashStorage;
 use sha2::{Sha256, Digest};
 
 /// Max number of connections
@@ -36,8 +37,8 @@ const OTA_STATUS_SUCCESS: u8 = 0x02;
 const OTA_STATUS_ERROR: u8 = 0x03;
 
 /// OTA state
-struct OtaState {
-    ota_updater: Option<OtaUpdater>,
+struct OtaState<'a> {
+    ota_updater: Option<OtaUpdater<'a, FlashStorage>>,
     bytes_received: usize,
     expected_hash: Option<[u8; 32]>,
     hasher: Option<Sha256>,
@@ -194,6 +195,20 @@ async fn gatt_events_task(
     let ota_data = &server.ota_service.ota_data;
     let ota_status = &server.ota_service.ota_status;
 
+    // Initialize flash storage and buffer for OTA (static lifetime)
+    static mut FLASH_STORAGE: Option<FlashStorage> = None;
+    static mut OTA_BUFFER: [u8; 3072] = [0u8; 3072];
+    
+    // Initialize flash storage on first use
+    let flash = unsafe {
+        if FLASH_STORAGE.is_none() {
+            FLASH_STORAGE = Some(FlashStorage::new());
+        }
+        FLASH_STORAGE.as_mut().unwrap()
+    };
+    
+    let buffer = unsafe { &mut OTA_BUFFER };
+
     // Initialize OTA state
     let mut ota_state = OtaState {
         ota_updater: None,
@@ -270,7 +285,7 @@ async fn gatt_events_task(
                                 match cmd {
                                     OTA_CMD_BEGIN => {
                                         info!("[ota] Beginning OTA update");
-                                        match begin_ota(&mut ota_state) {
+                                        match begin_ota(&mut ota_state, flash, buffer) {
                                             Ok(_) => {
                                                 server.set(ota_control, &OTA_CMD_BEGIN).ok();
                                                 server.set(ota_status, &OTA_STATUS_IN_PROGRESS).ok();
@@ -293,7 +308,7 @@ async fn gatt_events_task(
                                                 info!("[ota] OTA committed, system will restart");
                                                 // Give time for response to be sent
                                                 Timer::after_millis(100).await;
-                                                esp_hal::reset::software_reset();
+                                                esp_hal::reset();
                                                 None
                                             }
                                             Err(e) => {
@@ -387,7 +402,7 @@ async fn gatt_events_task(
 }
 
 /// Begin OTA update by initializing the OtaUpdater
-fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
+fn begin_ota<'a>(ota_state: &mut OtaState<'a>, flash: &'a mut FlashStorage, buffer: &'a mut [u8; 3072]) -> Result<(), &'static str> {
     if ota_state.ota_updater.is_some() {
         return Err("OTA already in progress");
     }
@@ -400,7 +415,7 @@ fn begin_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     info!("[ota] Beginning OTA update");
     
     // Create OtaUpdater - it will automatically select the next partition
-    let ota_updater = match OtaUpdater::new() {
+    let ota_updater = match OtaUpdater::new(flash, buffer) {
         Ok(updater) => updater,
         Err(_) => return Err("Failed to create OtaUpdater"),
     };
@@ -480,7 +495,7 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     info!("[ota] OTA update completed successfully - restarting");
     
     // Trigger system reset
-    esp_hal::reset::software_reset();
+    esp_hal::reset();
     
     #[allow(unreachable_code)]
     Ok(())
