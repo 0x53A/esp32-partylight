@@ -24,8 +24,8 @@ jobs:
           buildtargets: esp32s3
           ldproxy: false
 
-      - name: Install cargo-espflash
-        run: cargo install cargo-espflash
+      - name: Install espflash
+        run: cargo install espflash
 
       - name: Build firmware
         working-directory: mcu
@@ -39,7 +39,7 @@ jobs:
       - name: Generate firmware binary
         working-directory: mcu
         run: |
-          cargo espflash save-image \
+          espflash save-image \
             --chip esp32s3 \
             --partition-table partitions.csv \
             target/xtensa-esp32s3-none-elf/release/esp32_partylight \
