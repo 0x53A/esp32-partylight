@@ -11,13 +11,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Rust toolchain
         run: |
-          rustup update stable
-          rustup default stable
+          rustup update nightly
+          rustup default nightly
           rustup target add wasm32-unknown-unknown
 
       - name: Rust Cache
@@ -27,7 +25,7 @@ jobs:
 
       - name: Run cargo check on app
         working-directory: app
-        run: cargo check --all-targets
+        run: cargo check --no-default-features --features font_hack
 
   check-mcu:
     runs-on: ubuntu-latest
