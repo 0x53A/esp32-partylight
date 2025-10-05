@@ -69,7 +69,7 @@ android_logger = "0.15"
 
 
 [features]
-default = ["font_hack", "font_berkeley_mono"]
+default = ["font_hack"]
 font_ubuntu_light = []
 font_hack = []
 # berkeley mono does not contain the PI character, so you should also include a fallback font
