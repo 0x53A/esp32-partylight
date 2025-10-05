@@ -13,6 +13,9 @@ use js_sys;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+
 // Import JS helper functions as returning Promises; we'll await them via JsFuture.
 #[cfg(target_arch = "wasm32")]
 use crate::web_bluetooth::Bluetooth;
@@ -473,6 +476,173 @@ impl PartylightApp {
                                     self.conn = ConnectionStatus::Disconnected;
                                     self.config = None; // clear config from UI
                                     self.last_status = "Disconnected".into();
+                                }
+                                
+                                // OTA Update button
+                                if ui.add_enabled(!self.busy, Button::new("OTA Update")).clicked() {
+                                    self.last_status = "Select firmware file...".into();
+                                    
+                                    // Create file input element
+                                    use web_sys::{window, HtmlInputElement};
+                                    if let Some(window) = window() {
+                                        if let Some(document) = window.document() {
+                                            if let Ok(input) = document.create_element("input") {
+                                                if let Ok(input) = input.dyn_into::<HtmlInputElement>() {
+                                                    input.set_type("file");
+                                                    input.set_accept(".bin");
+                                                    
+                                                    let bt_ptr: *mut Bluetooth = &mut self.bt as *mut _;
+                                                    let messages = self.messages.clone();
+                                                    let ctx = ui.ctx().clone();
+                                                    
+                                                    // Create change handler
+                                                    let onchange = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::Event| {
+                                                        use web_sys::{FileReader, File};
+                                                        
+                                                        if let Some(target) = event.target() {
+                                                            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
+                                                                if let Some(files) = input.files() {
+                                                                    if files.length() > 0 {
+                                                                        if let Some(file) = files.get(0) {
+                                                                            let messages_clone = messages.clone();
+                                                                            let ctx_clone = ctx.clone();
+                                                                            
+                                                                            messages_clone.borrow_mut().push_back(AppMessage::SetBusy(true));
+                                                                            messages_clone.borrow_mut().push_back(AppMessage::Status(format!("Reading firmware file...")));
+                                                                            ctx_clone.request_repaint();
+                                                                            
+                                                                            // Read file
+                                                                            if let Ok(reader) = FileReader::new() {
+                                                                                let messages_read = messages_clone.clone();
+                                                                                let ctx_read = ctx_clone.clone();
+                                                                                
+                                                                                let onload = wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::ProgressEvent| {
+                                                                                    // File read complete - perform OTA
+                                                                                    if let Ok(result) = reader.result() {
+                                                                                        if let Ok(array_buffer) = result.dyn_into::<js_sys::ArrayBuffer>() {
+                                                                                            let firmware_data = js_sys::Uint8Array::new(&array_buffer);
+                                                                                            let firmware_len = firmware_data.length();
+                                                                                            
+                                                                                            messages_read.borrow_mut().push_back(AppMessage::Status(format!("Uploading {} bytes...", firmware_len)));
+                                                                                            ctx_read.request_repaint();
+                                                                                            
+                                                                                            let messages_ota = messages_read.clone();
+                                                                                            let ctx_ota = ctx_read.clone();
+                                                                                            
+                                                                                            spawn_local(async move {
+                                                                                                // Calculate SHA256 hash using Web Crypto API
+                                                                                                let hash_result = async {
+                                                                                                    use web_sys::{window, SubtleCrypto};
+                                                                                                    use wasm_bindgen::JsCast;
+                                                                                                    use wasm_bindgen_futures::JsFuture;
+                                                                                                    
+                                                                                                    let window = window().ok_or("No window")?;
+                                                                                                    let crypto = window.crypto().map_err(|_| "No crypto")?;
+                                                                                                    let subtle = crypto.subtle();
+                                                                                                    
+                                                                                                    let promise = subtle.digest_with_str_and_u8_array("SHA-256", &firmware_data.to_vec())
+                                                                                                        .map_err(|_| "Digest failed")?;
+                                                                                                    let result = JsFuture::from(promise).await.map_err(|_| "Hash calculation failed")?;
+                                                                                                    let hash_buffer = result.dyn_into::<js_sys::ArrayBuffer>().map_err(|_| "Invalid hash buffer")?;
+                                                                                                    Ok::<js_sys::Uint8Array, &str>(js_sys::Uint8Array::new(&hash_buffer))
+                                                                                                }.await;
+                                                                                                
+                                                                                                match hash_result {
+                                                                                                    Ok(hash) => {
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::Status("Hash calculated, sending to device...".into()));
+                                                                                                        ctx_ota.request_repaint();
+                                                                                                        
+                                                                                                        // Send hash
+                                                                                                        if let Err(e) = unsafe { (&*bt_ptr).ota_set_hash(&hash).await } {
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Failed to set hash: {:?}", e)));
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                            ctx_ota.request_repaint();
+                                                                                                            return;
+                                                                                                        }
+                                                                                                        
+                                                                                                        // Begin OTA
+                                                                                                        if let Err(e) = unsafe { (&*bt_ptr).ota_begin().await } {
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Failed to begin OTA: {:?}", e)));
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                            ctx_ota.request_repaint();
+                                                                                                            return;
+                                                                                                        }
+                                                                                                        
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::Status("OTA started, sending data...".into()));
+                                                                                                        ctx_ota.request_repaint();
+                                                                                                        
+                                                                                                        // Send firmware in chunks
+                                                                                                        let chunk_size = 512;
+                                                                                                        let mut offset = 0;
+                                                                                                        
+                                                                                                        while offset < firmware_len {
+                                                                                                            let end = (offset + chunk_size).min(firmware_len);
+                                                                                                            let chunk = firmware_data.subarray(offset, end);
+                                                                                                            
+                                                                                                            if let Err(e) = unsafe { (&*bt_ptr).ota_write_chunk(&chunk).await } {
+                                                                                                                messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Failed to write chunk: {:?}", e)));
+                                                                                                                let _ = unsafe { (&*bt_ptr).ota_abort().await };
+                                                                                                                messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                                ctx_ota.request_repaint();
+                                                                                                                return;
+                                                                                                            }
+                                                                                                            
+                                                                                                            offset = end;
+                                                                                                            
+                                                                                                            // Update progress every 10%
+                                                                                                            if offset % (firmware_len / 10).max(1) < chunk_size {
+                                                                                                                let progress = (offset * 100) / firmware_len;
+                                                                                                                messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Uploading... {}%", progress)));
+                                                                                                                ctx_ota.request_repaint();
+                                                                                                            }
+                                                                                                        }
+                                                                                                        
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::Status("Committing update...".into()));
+                                                                                                        ctx_ota.request_repaint();
+                                                                                                        
+                                                                                                        // Commit OTA
+                                                                                                        if let Err(e) = unsafe { (&*bt_ptr).ota_commit().await } {
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Failed to commit: {:?}", e)));
+                                                                                                            messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                            ctx_ota.request_repaint();
+                                                                                                            return;
+                                                                                                        }
+                                                                                                        
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::Status("OTA complete! Device will reboot.".into()));
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                        ctx_ota.request_repaint();
+                                                                                                    }
+                                                                                                    Err(e) => {
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::Status(format!("Hash calculation failed: {}", e)));
+                                                                                                        messages_ota.borrow_mut().push_back(AppMessage::SetBusy(false));
+                                                                                                        ctx_ota.request_repaint();
+                                                                                                    }
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    }
+                                                                                }) as Box<dyn FnMut(_)>);
+                                                                                
+                                                                                reader.set_onload(Some(onload.as_ref().unchecked_ref()));
+                                                                                onload.forget();
+                                                                                
+                                                                                let _ = reader.read_as_array_buffer(&file);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }) as Box<dyn FnMut(_)>);
+                                                    
+                                                    input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
+                                                    onchange.forget();
+                                                    
+                                                    input.click();
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             });
                         }
