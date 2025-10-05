@@ -1,0 +1,52 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  check-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+
+      - name: Run cargo check on app
+        working-directory: app
+        run: cargo check --all-targets
+
+  check-mcu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ESP Rust toolchain
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: false
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mcu
+
+      - name: Run cargo check on mcu
+        working-directory: mcu
+        run: cargo check --all-targets
