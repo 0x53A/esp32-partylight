@@ -15,8 +15,8 @@ use trouble_host::prelude::*;
 use crate::static_cell_init;
 
 // OTA-related imports
-use esp_bootloader_ota::{OtaUpdate, Partition};
-use embedded_storage::nor_flash::NorFlash;
+use esp_storage::{FlashStorage};
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use sha2::{Sha256, Digest};
 
 /// Max number of connections
@@ -38,10 +38,11 @@ const OTA_STATUS_ERROR: u8 = 0x03;
 
 /// OTA state
 struct OtaState {
-    ota_update: Option<OtaUpdate>,
+    flash_offset: Option<u32>,  // Offset in flash where we're writing
     bytes_received: usize,
     expected_hash: Option<[u8; 32]>,
     hasher: Option<Sha256>,
+    partition_size: u32,  // Size of the OTA partition
 }
 
 // GATT Server definition
@@ -197,10 +198,11 @@ async fn gatt_events_task(
 
     // Initialize OTA state
     let mut ota_state = OtaState {
-        ota_update: None,
+        flash_offset: None,
         bytes_received: 0,
         expected_hash: None,
         hasher: None,
+        partition_size: 0x100000,  // 1MB as per partition table
     };
 
     let reason = loop {
