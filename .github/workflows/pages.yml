@@ -48,6 +48,8 @@ jobs:
 
       - name: Rust Cache # cache the rust build artefacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
 
       - name: Download and install Trunk binary
         working-directory: app
