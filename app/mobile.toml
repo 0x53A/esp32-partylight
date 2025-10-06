@@ -1,6 +1,6 @@
 [app]
 name = "partylight-config-app"
-stylized-name = "Blindomator 9000 Pro Max"
+stylized-name = "Diskomator 9000 Pro Max"
 identifier = "com.x53a.partylight"
 template-pack = "egui"
 

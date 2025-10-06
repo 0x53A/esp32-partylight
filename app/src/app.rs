@@ -164,7 +164,7 @@ impl PartylightApp {
             let rect = ui.max_rect();
             let x = rect.left() + 24.0; // left-align with a small left margin
             let y = rect.top() + 18.0;
-            let text = "Blindomator 9000 Pro Max Config Editor";
+            let text = "Diskomator 9000 Pro Max Config Editor";
             // pink shadow behind
             painter.text(
                 egui::pos2(x + 4.0, y + 2.0),
@@ -978,7 +978,7 @@ impl PartylightApp {
     pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(
-                egui::RichText::new("Blindomator 9000 Pro Max Config Editor (WASM only)")
+                egui::RichText::new("Diskomator 9000 Pro Max Config Editor (WASM only)")
                     .font(egui::FontId::new(
                         22.0,
                         egui::FontFamily::Name(std::sync::Arc::from("Cynatar")),

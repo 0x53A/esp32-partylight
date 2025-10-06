@@ -36,7 +36,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Blindomator 9000 Pro Max",
+        "Diskomator 9000 Pro Max",
         native_options,
         Box::new(|cc| {
             add_fonts_to_ctx(&cc.egui_ctx);

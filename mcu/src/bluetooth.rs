@@ -118,7 +118,7 @@ pub async fn run<C, RNG>(
 
     info!("Starting advertising and GATT service");
     let server = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
-        name: "Blindomator",
+        name: "Diskomator",
         appearance: &appearance::human_interface_device::GENERIC_HUMAN_INTERFACE_DEVICE,
     }))
     .unwrap();
@@ -133,7 +133,7 @@ pub async fn run<C, RNG>(
 
     let _ = join(ble_task(runner), async {
         loop {
-            match advertise("Blindomator", &mut peripheral, &server).await {
+            match advertise("Diskomator", &mut peripheral, &server).await {
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
                     let a = gatt_events_task(&server, &conn, config_signal);
