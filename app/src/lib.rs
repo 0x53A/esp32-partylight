@@ -49,7 +49,7 @@ impl ApplicationHandler<UserEvent> for AppState {
                 .with_decorations(true)
                 .with_resizable(true)
                 .with_transparent(false)
-                .with_title("Blindomator 9000 Pro Max Config Editor")
+                .with_title("Diskomator 9000 Pro Max Config Editor")
                 .with_inner_size(winit::dpi::PhysicalSize {
                     width: INITIAL_WIDTH,
                     height: INITIAL_HEIGHT,

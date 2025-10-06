@@ -100,7 +100,7 @@ impl Bluetooth {
                 Reflect::set(
                     &f2,
                     &JsValue::from_str("namePrefix"),
-                    &JsValue::from_str("Blindomator"),
+                    &JsValue::from_str("Diskomator"),
                 )?;
                 filters2.push(&f2);
                 Reflect::set(&opts2, &JsValue::from_str("filters"), &filters2)?;
