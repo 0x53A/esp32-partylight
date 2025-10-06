@@ -4,12 +4,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
 #[cfg(target_arch = "wasm32")]
-#[cfg(target_arch = "wasm32")]
-use js_sys;
-
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
@@ -18,8 +14,6 @@ use wasm_bindgen_futures::spawn_local;
 use crate::web_bluetooth::Bluetooth;
 #[cfg(target_arch = "wasm32")]
 use futures_util::StreamExt;
-#[cfg(target_arch = "wasm32")]
-use gloo_timers::future::IntervalStream;
 
 pub struct PartylightApp {
     config: Option<AppConfig>,
@@ -231,7 +225,7 @@ impl PartylightApp {
                                                             let hb_run_token = hb_run.clone();
                                                             spawn_local(async move {
                                                                 let mut interval = gloo_timers::future::IntervalStream::new(5000);
-                                                                while let Some(_) = interval.next().await {
+                                                                while (interval.next().await).is_some() {
                                                                     // check cancellation
                                                                     if !*hb_run_token.borrow() {
                                                                         // stopped; break
@@ -251,8 +245,8 @@ impl PartylightApp {
                                                                                     let q = messages_hb.borrow();
                                                                                     q.iter().any(|m| matches!(m, AppMessage::SetConfig(_)))
                                                                                 };
-                                                                                if !has_cfg {
-                                                                                    if let Ok(jsv) = unsafe { (&*bt_clone).read_config_raw().await } {
+                                                                                if !has_cfg
+                                                                                    && let Ok(jsv) = unsafe { (&*bt_clone).read_config_raw().await } {
                                                                                         let u8arr = js_sys::Uint8Array::new(&jsv.into());
                                                                                         let mut vec = vec![0u8; u8arr.length() as usize];
                                                                                         u8arr.copy_to(&mut vec[..]);
@@ -260,7 +254,6 @@ impl PartylightApp {
                                                                                             messages_hb.borrow_mut().push_back(AppMessage::SetConfig(cfg.clone()));
                                                                                         }
                                                                                     }
-                                                                                }
                                                                                 messages_hb.borrow_mut().push_back(AppMessage::Status("Reconnected".into()));
                                                                                 // keep user edits if present, otherwise use freshly-read config
                                                                                 if let Some(cfg_msg) = {
@@ -301,7 +294,7 @@ impl PartylightApp {
                                                                 }
                                                             });
                                                         } else {
-                                                            messages.borrow_mut().push_back(AppMessage::Status(format!("Decode error: <bad postcard>")));
+                                                            messages.borrow_mut().push_back(AppMessage::Status("Decode error: <bad postcard>".to_string()));
                                                             // transition to Broken preserving last known config
                                                             let last_cfg = {
                                                                 let q = messages.borrow();

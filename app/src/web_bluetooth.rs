@@ -227,28 +227,25 @@ impl Bluetooth {
     pub async fn disconnect(&mut self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: disconnect start"));
         // Try to call disconnect on the cached server or device.gatt
-        if let Some(srv) = self.server.take() {
-            if let Ok(disc) = Reflect::get(&srv, &JsValue::from_str("disconnect")) {
-                if let Ok(func) = disc.dyn_into::<Function>() {
-                    let _ = func.call0(&srv);
-                    console::log_1(&JsValue::from_str(
-                        "web_bluetooth: server.disconnect called",
-                    ));
-                }
-            }
+        if let Some(srv) = self.server.take()
+            && let Ok(disc) = Reflect::get(&srv, &JsValue::from_str("disconnect"))
+            && let Ok(func) = disc.dyn_into::<Function>()
+        {
+            let _ = func.call0(&srv);
+            console::log_1(&JsValue::from_str(
+                "web_bluetooth: server.disconnect called",
+            ));
         }
         // try device.gatt.disconnect() as fallback
-        if let Some(dev) = self.device.take() {
-            if let Ok(gatt) = Reflect::get(&dev, &JsValue::from_str("gatt")) {
-                if let Ok(disc) = Reflect::get(&gatt, &JsValue::from_str("disconnect")) {
-                    if let Ok(func) = disc.dyn_into::<Function>() {
-                        let _ = func.call0(&gatt);
-                        console::log_1(&JsValue::from_str(
-                            "web_bluetooth: device.gatt.disconnect called",
-                        ));
-                    }
-                }
-            }
+        if let Some(dev) = self.device.take()
+            && let Ok(gatt) = Reflect::get(&dev, &JsValue::from_str("gatt"))
+            && let Ok(disc) = Reflect::get(&gatt, &JsValue::from_str("disconnect"))
+            && let Ok(func) = disc.dyn_into::<Function>()
+        {
+            let _ = func.call0(&gatt);
+            console::log_1(&JsValue::from_str(
+                "web_bluetooth: device.gatt.disconnect called",
+            ));
         }
 
         // clear characteristic as well

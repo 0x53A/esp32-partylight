@@ -43,7 +43,7 @@ pub async fn neopixel_task(
     loop {
         let new_data = pixel_signal.wait().await;
         let write_result = neopixel
-            .write_async(&*new_data)
+            .write_async(&new_data)
             .await
             .map_err(|err| error_with_location!("Failed to write to neopixel: {:?}", err));
         if let Err(e) = write_result {
@@ -336,8 +336,8 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
         common::config::NeopixelMatrixPattern::Bars(channels) => {
             let channel_strengths = channels.clone().map(|channel| {
                 let f = calculate_channel(spectrum, &channel);
-                let clamped = f.min(1.0);
-                clamped
+
+                f.min(1.0)
             });
 
             // create a bar pattern, with 2x16-pixel bars
