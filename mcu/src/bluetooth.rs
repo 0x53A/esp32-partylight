@@ -6,7 +6,7 @@ use embassy_futures::join::join;
 use embassy_futures::select::select;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::Timer;
-use esp_hal::peripherals::BT;
+use esp_hal::peripherals::{BT, FLASH};
 use esp_radio::ble::controller::BleConnector;
 use log::{error, info, warn};
 use rand_core::{CryptoRng, RngCore};
@@ -38,7 +38,7 @@ const OTA_STATUS_ERROR: u8 = 0x03;
 
 /// OTA state
 struct OtaState<'a> {
-    ota_updater: Option<OtaUpdater<'a, FlashStorage>>,
+    ota_updater: Option<OtaUpdater<'a, FlashStorage<'a>>>,
     bytes_received: usize,
     expected_hash: Option<[u8; 32]>,
     hasher: Option<Sha256>,
@@ -186,6 +186,7 @@ async fn ble_task<C: Controller, P: PacketPool>(mut runner: Runner<'_, C, P>) {
 async fn gatt_events_task(
     server: &Server<'_>,
     conn: &GattConnection<'_, '_, DefaultPacketPool>,
+    flash: FLASH<'static>,
     config_signal: &Signal<CriticalSectionRawMutex, common::config::AppConfig>,
 ) -> Result<(), Error> {
     let config_version = &server.config_service.config_version;
@@ -196,13 +197,13 @@ async fn gatt_events_task(
     let ota_status = &server.ota_service.ota_status;
 
     // Initialize flash storage and buffer for OTA (static lifetime)
-    static mut FLASH_STORAGE: Option<FlashStorage> = None;
+    static mut FLASH_STORAGE: Option<FlashStorage<'static>> = None;
     static mut OTA_BUFFER: [u8; 3072] = [0u8; 3072];
 
-    // Initialize flash storage on first use - cast to 'static lifetime
-    let flash: &'static mut FlashStorage = unsafe {
+    // Initialize flash storage on first use
+    let flash_storage: &'static mut FlashStorage<'static> = unsafe {
         if FLASH_STORAGE.is_none() {
-            FLASH_STORAGE = Some(FlashStorage::new());
+            FLASH_STORAGE = Some(FlashStorage::new(flash));
         }
         FLASH_STORAGE.as_mut().unwrap()
     };
@@ -285,7 +286,7 @@ async fn gatt_events_task(
                                 match cmd {
                                     OTA_CMD_BEGIN => {
                                         info!("[ota] Beginning OTA update");
-                                        match begin_ota(&mut ota_state, flash, buffer) {
+                                        match begin_ota(&mut ota_state, flash_storage, buffer) {
                                             Ok(_) => {
                                                 server.set(ota_control, &OTA_CMD_BEGIN).ok();
                                                 server
@@ -600,6 +601,7 @@ async fn custom_task<C: Controller, P: PacketPool>(
 #[embassy_executor::task]
 async fn bluetooth_task(
     bt: BT<'static>,
+    flash: FLASH<'static>,
     config_signal: &'static Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) {
@@ -612,14 +614,15 @@ async fn bluetooth_task(
     let connector = BleConnector::new(radio, bt);
     let controller: ExternalController<_, 20> = ExternalController::new(connector);
 
-    run(controller, &mut rng, config_signal, initial_config).await;
+    run(controller, &mut rng, flash, config_signal, initial_config).await;
 }
 
 pub fn init_bluetooth(
     spawner: &Spawner,
     bt: BT<'static>,
+    flash: FLASH<'static>,
     config_signal: &'static Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) -> Result<(), embassy_executor::SpawnError> {
-    spawner.spawn(bluetooth_task(bt, config_signal, initial_config))
+    spawner.spawn(bluetooth_task(bt, flash, config_signal, initial_config))
 }
