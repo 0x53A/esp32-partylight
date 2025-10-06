@@ -624,6 +624,7 @@ impl PartylightApp {
                             exponent: 1,
                             color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
+                            filter: common::config::Filter::None,
                         });
                         match other {
                             NeopixelMatrixPattern::Bars(chs) => {
@@ -650,6 +651,7 @@ impl PartylightApp {
                             exponent: 1,
                             color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
+                            filter: common::config::Filter::None,
                         });
                         match other {
                             NeopixelMatrixPattern::Stripes(chs) => {
@@ -676,6 +678,7 @@ impl PartylightApp {
                             exponent: 1,
                             color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
+                            filter: common::config::Filter::None,
                         });
                         match other {
                             NeopixelMatrixPattern::Stripes(chs) => {
@@ -721,6 +724,33 @@ impl PartylightApp {
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
                                 });
+                                ui.horizontal(|ui| {
+                                    ui.label("Filter:");
+                                    let filter_idx = match &ch.filter {
+                                        common::config::Filter::None => 0,
+                                        common::config::Filter::MovingAverage => 1,
+                                        common::config::Filter::ExponentialMovingAverage => 2,
+                                    };
+                                    let mut new_filter_idx = filter_idx;
+                                    egui::ComboBox::from_id_salt(format!("filter_stripes_{}", i))
+                                        .selected_text(match filter_idx {
+                                            0 => "None",
+                                            1 => "Moving Average",
+                                            2 => "Exponential Moving Average",
+                                            _ => "None",
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut new_filter_idx, 0, "None");
+                                            ui.selectable_value(&mut new_filter_idx, 1, "Moving Average");
+                                            ui.selectable_value(&mut new_filter_idx, 2, "Exponential Moving Average");
+                                        });
+                                    ch.filter = match new_filter_idx {
+                                        0 => common::config::Filter::None,
+                                        1 => common::config::Filter::MovingAverage,
+                                        2 => common::config::Filter::ExponentialMovingAverage,
+                                        _ => common::config::Filter::None,
+                                    };
+                                });
                             });
                         }
                     }
@@ -748,6 +778,33 @@ impl PartylightApp {
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
                                 });
+                                ui.horizontal(|ui| {
+                                    ui.label("Filter:");
+                                    let filter_idx = match &ch.filter {
+                                        common::config::Filter::None => 0,
+                                        common::config::Filter::MovingAverage => 1,
+                                        common::config::Filter::ExponentialMovingAverage => 2,
+                                    };
+                                    let mut new_filter_idx = filter_idx;
+                                    egui::ComboBox::from_id_salt(format!("filter_bars_{}", i))
+                                        .selected_text(match filter_idx {
+                                            0 => "None",
+                                            1 => "Moving Average",
+                                            2 => "Exponential Moving Average",
+                                            _ => "None",
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut new_filter_idx, 0, "None");
+                                            ui.selectable_value(&mut new_filter_idx, 1, "Moving Average");
+                                            ui.selectable_value(&mut new_filter_idx, 2, "Exponential Moving Average");
+                                        });
+                                    ch.filter = match new_filter_idx {
+                                        0 => common::config::Filter::None,
+                                        1 => common::config::Filter::MovingAverage,
+                                        2 => common::config::Filter::ExponentialMovingAverage,
+                                        _ => common::config::Filter::None,
+                                    };
+                                });
                             });
                         }
                     }
@@ -774,6 +831,33 @@ impl PartylightApp {
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).range(0.0..=1.0));
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
                                     ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Filter:");
+                                    let filter_idx = match &ch.filter {
+                                        common::config::Filter::None => 0,
+                                        common::config::Filter::MovingAverage => 1,
+                                        common::config::Filter::ExponentialMovingAverage => 2,
+                                    };
+                                    let mut new_filter_idx = filter_idx;
+                                    egui::ComboBox::from_id_salt(format!("filter_quarters_{}", i))
+                                        .selected_text(match filter_idx {
+                                            0 => "None",
+                                            1 => "Moving Average",
+                                            2 => "Exponential Moving Average",
+                                            _ => "None",
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut new_filter_idx, 0, "None");
+                                            ui.selectable_value(&mut new_filter_idx, 1, "Moving Average");
+                                            ui.selectable_value(&mut new_filter_idx, 2, "Exponential Moving Average");
+                                        });
+                                    ch.filter = match new_filter_idx {
+                                        0 => common::config::Filter::None,
+                                        1 => common::config::Filter::MovingAverage,
+                                        2 => common::config::Filter::ExponentialMovingAverage,
+                                        _ => common::config::Filter::None,
+                                    };
                                 });
                             });
                         }

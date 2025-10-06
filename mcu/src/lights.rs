@@ -224,6 +224,48 @@ fn hann_window(buffer: &mut [f32]) {
         *v *= w;
     }
 }
+
+fn apply_filter(
+    current_value: f32,
+    filter: &common::config::Filter,
+    channel_index: usize,
+) -> f32 {
+    // Static storage for filter state, supporting up to 8 channels (max used in Bars pattern)
+    static mut FILTER_STATE: [[f32; 4]; 8] = [[0.0; 4]; 8];
+    
+    match filter {
+        common::config::Filter::None => current_value,
+        common::config::Filter::MovingAverage => {
+            // Simple moving average over last 4 samples
+            unsafe {
+                // Shift values
+                FILTER_STATE[channel_index][3] = FILTER_STATE[channel_index][2];
+                FILTER_STATE[channel_index][2] = FILTER_STATE[channel_index][1];
+                FILTER_STATE[channel_index][1] = FILTER_STATE[channel_index][0];
+                FILTER_STATE[channel_index][0] = current_value;
+                
+                // Calculate average
+                (FILTER_STATE[channel_index][0]
+                    + FILTER_STATE[channel_index][1]
+                    + FILTER_STATE[channel_index][2]
+                    + FILTER_STATE[channel_index][3])
+                    / 4.0
+            }
+        }
+        common::config::Filter::ExponentialMovingAverage => {
+            // Exponential moving average (EMA) with alpha = 0.3
+            // Formula: EMA = alpha * current + (1 - alpha) * previous_EMA
+            const ALPHA: f32 = 0.3;
+            unsafe {
+                let previous_ema = FILTER_STATE[channel_index][0];
+                let new_ema = ALPHA * current_value + (1.0 - ALPHA) * previous_ema;
+                FILTER_STATE[channel_index][0] = new_ema;
+                new_ema
+            }
+        }
+    }
+}
+
 //
 
 fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL_LENGTH]> {
@@ -305,9 +347,11 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
 
     match &config.pattern {
         common::config::NeopixelMatrixPattern::Stripes(channels) => {
-            let channel_colors = channels.clone().map(|channel| {
-                let f = calculate_channel(spectrum, &channel);
-                let clamped = f.min(1.0);
+            let channel_colors: [RGB8; 4] = core::array::from_fn(|i| {
+                let channel = &channels[i];
+                let f = calculate_channel(spectrum, channel);
+                let filtered = apply_filter(f, &channel.filter, i);
+                let clamped = filtered.min(1.0);
                 RGB8::new(
                     (clamped * channel.color[0] * 255.0) as u8,
                     (clamped * channel.color[1] * 255.0) as u8,
@@ -334,10 +378,11 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
             Box::new(colors)
         }
         common::config::NeopixelMatrixPattern::Bars(channels) => {
-            let channel_strengths = channels.clone().map(|channel| {
-                let f = calculate_channel(spectrum, &channel);
-
-                f.min(1.0)
+            let channel_strengths: [f32; 8] = core::array::from_fn(|i| {
+                let channel = &channels[i];
+                let f = calculate_channel(spectrum, channel);
+                let filtered = apply_filter(f, &channel.filter, i);
+                filtered.min(1.0)
             });
 
             // create a bar pattern, with 2x16-pixel bars
@@ -361,9 +406,11 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
             Box::new(colors)
         }
         common::config::NeopixelMatrixPattern::Quarters(channels) => {
-            let channel_colors = channels.clone().map(|channel| {
-                let f = calculate_channel(spectrum, &channel);
-                let clamped = f.min(1.0);
+            let channel_colors: [RGB8; 4] = core::array::from_fn(|i| {
+                let channel = &channels[i];
+                let f = calculate_channel(spectrum, channel);
+                let filtered = apply_filter(f, &channel.filter, i);
+                let clamped = filtered.min(1.0);
                 RGB8::new(
                     (clamped * channel.color[0] * 255.0) as u8,
                     (clamped * channel.color[1] * 255.0) as u8,
