@@ -94,6 +94,7 @@ struct OtaService {
 pub async fn run<C, RNG>(
     controller: C,
     random_generator: &mut RNG,
+    flash: FLASH<'static>,
     config_signal: &Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) where
@@ -136,7 +137,7 @@ pub async fn run<C, RNG>(
             match advertise("Diskomator", &mut peripheral, &server).await {
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
-                    let a = gatt_events_task(&server, &conn, config_signal);
+                    let a = gatt_events_task(&server, &conn, flash, config_signal);
                     let b = custom_task(&server, &conn, &stack);
                     // run until any task ends (usually because the connection has been closed),
                     // then return to advertising state.
@@ -308,10 +309,12 @@ async fn gatt_events_task(
                                             Ok(_) => {
                                                 server.set(ota_control, &OTA_CMD_COMMIT).ok();
                                                 server.set(ota_status, &OTA_STATUS_SUCCESS).ok();
-                                                info!("[ota] OTA committed, system will restart");
+                                                info!("[ota] OTA committed - new firmware marked bootable");
+                                                info!("[ota] Please reset device to boot into new firmware");
                                                 // Give time for response to be sent
                                                 Timer::after_millis(100).await;
-                                                esp_hal::reset::software_reset();
+                                                // TODO: Add system reset when esp-hal supports it
+                                                // For now, user must manually reset device
                                                 None
                                             }
                                             Err(e) => {
@@ -511,12 +514,12 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
         return Err("Failed to complete OTA update");
     }
 
-    info!("[ota] OTA update completed successfully - restarting");
+    info!("[ota] OTA update completed successfully - new firmware marked bootable");
+    info!("[ota] Please reset device to boot into new firmware");
 
-    // Trigger system reset
-    esp_hal::reset::software_reset();
+    // TODO: Add system reset when esp-hal supports it
+    // For now, complete() marks partition bootable, user must manually reset
 
-    #[allow(unreachable_code)]
     Ok(())
 }
 
