@@ -1,7 +1,7 @@
 use js_sys::{Array, Function, Object, Promise, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{window, console};
+use web_sys::{console, window};
 
 const SERVICE_UUID: &str = "bbafe0b7-bf3a-405a-bff7-d632c44c85f8";
 const CONFIG_CHAR_UUID: &str = "fa57339a-e7e0-434e-9c98-93a15061e1ff";
@@ -39,18 +39,24 @@ impl Bluetooth {
     fn bluetooth_obj() -> Result<JsValue, JsValue> {
         let window = window().ok_or_else(|| JsValue::from_str("no window"))?;
         let nav = window.navigator();
-        console::log_1(&JsValue::from_str("web_bluetooth: getting navigator.bluetooth"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: getting navigator.bluetooth",
+        ));
         Reflect::get(&nav, &JsValue::from_str("bluetooth"))
     }
 
     async fn request_device_with_options(opts: &JsValue) -> Result<JsValue, JsValue> {
-        console::log_1(&JsValue::from_str("web_bluetooth: request_device_with_options start"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: request_device_with_options start",
+        ));
         let bt = Self::bluetooth_obj()?;
         let req = Reflect::get(&bt, &JsValue::from_str("requestDevice"))?;
         let func: Function = req.dyn_into()?;
         let promise: Promise = func.call1(&bt, opts)?.dyn_into()?;
         let result = JsFuture::from(promise).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: request_device_with_options success"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: request_device_with_options success",
+        ));
         Ok(result)
     }
 
@@ -76,12 +82,16 @@ impl Bluetooth {
     }
 
     async fn get_characteristic(service: &JsValue, uuid: &str) -> Result<JsValue, JsValue> {
-        console::log_1(&JsValue::from_str("web_bluetooth: get_characteristic start"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: get_characteristic start",
+        ));
         let get_fn = Reflect::get(service, &JsValue::from_str("getCharacteristic"))?;
         let func: Function = get_fn.dyn_into()?;
         let promise: Promise = func.call1(service, &JsValue::from_str(uuid))?.dyn_into()?;
         let res = JsFuture::from(promise).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: get_characteristic success"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: get_characteristic success",
+        ));
         Ok(res)
     }
 
@@ -157,15 +167,14 @@ impl Bluetooth {
             }
         };
 
+        // store device
+        console::log_1(&JsValue::from_str("web_bluetooth: device selected"));
+        self.device = Some(device.clone());
 
-    // store device
-    console::log_1(&JsValue::from_str("web_bluetooth: device selected"));
-    self.device = Some(device.clone());
-
-    // connect
-    console::log_1(&JsValue::from_str("web_bluetooth: connecting gatt"));
-    let server = Self::connect_gatt(&device).await?;
-    console::log_1(&JsValue::from_str("web_bluetooth: gatt connected"));
+        // connect
+        console::log_1(&JsValue::from_str("web_bluetooth: connecting gatt"));
+        let server = Self::connect_gatt(&device).await?;
+        console::log_1(&JsValue::from_str("web_bluetooth: gatt connected"));
         self.server = Some(server.clone());
 
         // get config service and characteristic
@@ -210,15 +219,22 @@ impl Bluetooth {
     // Try to reconnect non-interactively by using existing device object (if any)
     pub async fn reconnect(&mut self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: reconnect start"));
-        let device = self.device.as_ref().ok_or_else(|| JsValue::from_str("No device cached"))?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("No device cached"))?;
         let server = Self::connect_gatt(device).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: reconnect gatt connected"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: reconnect gatt connected",
+        ));
         self.server = Some(server.clone());
         
         let service = Self::get_service(&server, SERVICE_UUID).await?;
         console::log_1(&JsValue::from_str("web_bluetooth: reconnect got config service"));
         let cfg = Self::get_characteristic(&service, CONFIG_CHAR_UUID).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: reconnect got config characteristic"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: reconnect got config characteristic",
+        ));
         self.cfg_char = Some(cfg);
         
         // Try to get OTA service
@@ -245,7 +261,10 @@ impl Bluetooth {
 
     pub async fn read_config_raw(&self) -> Result<Uint8Array, JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: read_config_raw start"));
-        let char = self.cfg_char.as_ref().ok_or_else(|| JsValue::from_str("Not connected"))?;
+        let char = self
+            .cfg_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("Not connected"))?;
         let read_fn = Reflect::get(char, &JsValue::from_str("readValue"))?;
         let func: Function = read_fn.dyn_into()?;
         let promise: Promise = func.call0(char)?.dyn_into()?;
@@ -257,12 +276,17 @@ impl Bluetooth {
 
     pub async fn write_config_raw(&self, data: &Uint8Array) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: write_config_raw start"));
-        let char = self.cfg_char.as_ref().ok_or_else(|| JsValue::from_str("Not connected"))?;
+        let char = self
+            .cfg_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("Not connected"))?;
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, data)?.dyn_into()?;
         let _ = JsFuture::from(promise).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: write_config_raw success"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: write_config_raw success",
+        ));
         Ok(())
     }
 
@@ -282,7 +306,9 @@ impl Bluetooth {
             if let Ok(disc) = Reflect::get(&srv, &JsValue::from_str("disconnect")) {
                 if let Ok(func) = disc.dyn_into::<Function>() {
                     let _ = func.call0(&srv);
-                    console::log_1(&JsValue::from_str("web_bluetooth: server.disconnect called"));
+                    console::log_1(&JsValue::from_str(
+                        "web_bluetooth: server.disconnect called",
+                    ));
                 }
             }
         }
@@ -292,7 +318,9 @@ impl Bluetooth {
                 if let Ok(disc) = Reflect::get(&gatt, &JsValue::from_str("disconnect")) {
                     if let Ok(func) = disc.dyn_into::<Function>() {
                         let _ = func.call0(&gatt);
-                        console::log_1(&JsValue::from_str("web_bluetooth: device.gatt.disconnect called"));
+                        console::log_1(&JsValue::from_str(
+                            "web_bluetooth: device.gatt.disconnect called",
+                        ));
                     }
                 }
             }

@@ -1,6 +1,5 @@
 use crate::config::*;
 
-
 impl AppConfig {
     pub fn stripes() -> Self {
         Self {
@@ -15,7 +14,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 0, 0],
+                    color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -24,7 +23,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 255, 0],
+                    color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -33,7 +32,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 0, 255],
+                    color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -42,14 +41,12 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 255, 255],
+                    color: [1.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
             ]),
         }
-
     }
-
 
     pub fn bars() -> Self {
         Self {
@@ -64,7 +61,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 0, 0], // Red
+                    color: [1.0, 0.0, 0.0], // Red
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -73,7 +70,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 127, 0], // Orange
+                    color: [1.0, 0.498, 0.0], // Orange
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -82,7 +79,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 255, 0], // Yellow
+                    color: [1.0, 1.0, 0.0], // Yellow
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -91,7 +88,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 255, 0], // Green
+                    color: [0.0, 1.0, 0.0], // Green
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -100,7 +97,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 255, 255], // Cyan
+                    color: [0.0, 1.0, 1.0], // Cyan
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -109,7 +106,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 0, 255], // Blue
+                    color: [0.0, 0.0, 1.0], // Blue
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -118,7 +115,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [127, 0, 255], // Purple
+                    color: [0.498, 0.0, 1.0], // Purple
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -127,14 +124,12 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 0, 255], // Magenta
+                    color: [1.0, 0.0, 1.0], // Magenta
                     aggregate: AggregationMethod::Sum,
                 },
             ]),
         }
-
     }
-
 
     pub fn quarters() -> Self {
         Self {
@@ -149,9 +144,8 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 0, 0],
+                    color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
-
                 },
                 ChannelConfig {
                     start_index: 5,
@@ -159,7 +153,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 255, 0],
+                    color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -168,7 +162,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [0, 0, 255],
+                    color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -177,18 +171,16 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.01,
                     exponent: 6,
-                    color: [255, 255, 255],
+                    color: [1.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
             ]),
         }
-
     }
 }
 
-
 impl AppConfig {
-        pub fn bars2() -> Self {
+    pub fn bars2() -> Self {
         Self {
             config_version: CONFIG_VERSION,
             sample_count: 256,
@@ -201,7 +193,7 @@ impl AppConfig {
                     premult: 2.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [255, 0, 0],
+                    color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -210,7 +202,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [255, 127, 0],
+                    color: [1.0, 0.498, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -219,7 +211,7 @@ impl AppConfig {
                     premult: 3.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [255, 255, 0],
+                    color: [1.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -228,7 +220,7 @@ impl AppConfig {
                     premult: 5.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [0, 255, 0],
+                    color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -237,7 +229,7 @@ impl AppConfig {
                     premult: 10.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [0, 255, 255],
+                    color: [0.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -246,7 +238,7 @@ impl AppConfig {
                     premult: 10.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [0, 0, 255],
+                    color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -255,7 +247,7 @@ impl AppConfig {
                     premult: 10.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [127, 0, 255],
+                    color: [0.498, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
                 ChannelConfig {
@@ -264,7 +256,7 @@ impl AppConfig {
                     premult: 10.0,
                     noise_gate: 0.0,
                     exponent: 1,
-                    color: [255, 0, 255],
+                    color: [1.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
                 },
             ]),
