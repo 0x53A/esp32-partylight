@@ -15,7 +15,7 @@ use trouble_host::prelude::*;
 use crate::static_cell_init;
 
 // OTA-related imports
-use esp_bootloader_esp_idf::{ota_updater::OtaUpdater, partitions::FlashRegion};
+use esp_bootloader_esp_idf::ota_updater::OtaUpdater;
 use esp_storage::FlashStorage;
 use sha2::{Digest, Sha256};
 
@@ -214,7 +214,9 @@ async fn gatt_events_task(
             let flash_ptr = flash as *const FLASH as *mut FLASH;
             let flash_owned = core::ptr::read(flash_ptr);
             FLASH_STORAGE = Some(FlashStorage::new(flash_owned));
-            (FLASH_STORAGE.as_mut(), Some(&mut OTA_BUFFER))
+            // Use addr_of_mut! to avoid static_mut_refs lint
+            (unsafe { (*core::ptr::addr_of_mut!(FLASH_STORAGE)).as_mut() }, 
+             Some(unsafe { &mut *core::ptr::addr_of_mut!(OTA_BUFFER) }))
         } else {
             (None, None)
         }
@@ -555,11 +557,8 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     info!("[ota] OTA update completed successfully - new firmware marked bootable");
     info!("[ota] Resetting device...");
 
-    // Trigger software reset
-    esp_hal::rom::software_reset();
-
-    // This line will never be reached
-    Ok(())
+    // Trigger software reset - this function never returns
+    esp_hal::rom::software_reset()
 }
 
 /// Abort OTA update and clean up
