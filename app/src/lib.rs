@@ -205,20 +205,12 @@ fn _main(event_loop: EventLoop<UserEvent>) {
 
     add_fonts_to_ctx(&ctx);
 
-    let my_app = match crate::app::PartylightApp::new(&ctx) {
-        Ok(app) => app,
-        Err(e) => {
-            eprintln!("Failed to create app: {:?}", e);
-            crate::app::PartylightApp::default()
-        }
-    };
-
     let mut app_state = AppState {
         ctx,
         state: None,
         painter: None,
         window: None,
-        my_app,
+        my_app: crate::app::PartylightApp::default(),
         repaint_signal,
     };
 

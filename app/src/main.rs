@@ -42,13 +42,7 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(|cc| {
             add_fonts_to_ctx(&cc.egui_ctx);
-            match app::PartylightApp::new(&cc.egui_ctx) {
-                Ok(app) => Ok(Box::new(app)),
-                Err(e) => {
-                    eprintln!("Failed to create app: {:?}", e);
-                    Ok(Box::new(app::PartylightApp::default()))
-                }
-            }
+            Ok(Box::new(app::PartylightApp::default()))
         }),
     )
 }
@@ -81,13 +75,7 @@ fn main() {
                 web_options,
                 Box::new(|cc| {
                     add_fonts_to_ctx(&cc.egui_ctx);
-                    match app::PartylightApp::new(&cc.egui_ctx) {
-                        Ok(app) => Ok(Box::new(app)),
-                        Err(e) => {
-                            log::error!("Failed to create app: {:?}", e);
-                            Ok(Box::new(app::PartylightApp::default()))
-                        }
-                    }
+                    Ok(Box::new(app::PartylightApp::default()))
                 }),
             )
             .await;
