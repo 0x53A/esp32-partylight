@@ -5,7 +5,6 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 
-
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 

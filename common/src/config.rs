@@ -50,7 +50,6 @@ pub const CONFIG_VERSION: u32 = 1;
 impl AppConfig {
     /// Serialize config to binary data using postcard
     pub fn to_bytes<const B: usize>(&self) -> postcard::Result<heapless::Vec<u8, B>> {
-        
         postcard::to_vec::<_, B>(self)
     }
 
