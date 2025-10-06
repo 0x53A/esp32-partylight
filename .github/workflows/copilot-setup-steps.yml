@@ -45,6 +45,10 @@ jobs:
           buildtargets: esp32s3
           ldproxy: false
 
+      - name: Download and install Trunk binary
+        working-directory: app
+        run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+
       # Cache Rust dependencies
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -52,7 +56,3 @@ jobs:
           workspaces: |
             app
             mcu
-
-      # Install trunk for web application building
-      - name: Install trunk
-        run: cargo install --locked trunk
