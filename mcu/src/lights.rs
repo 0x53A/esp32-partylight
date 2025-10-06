@@ -309,9 +309,9 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
                 let f = calculate_channel(spectrum, &channel);
                 let clamped = f.min(1.0);
                 RGB8::new(
-                    (clamped * channel.color[0] as f32) as u8,
-                    (clamped * channel.color[1] as f32) as u8,
-                    (clamped * channel.color[2] as f32) as u8,
+                    (clamped * channel.color[0] * 255.0) as u8,
+                    (clamped * channel.color[1] * 255.0) as u8,
+                    (clamped * channel.color[2] * 255.0) as u8,
                 )
             });
 
@@ -350,9 +350,9 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
                         let pixel_y = 15 - y; // bottom to top
                         let pixel = xy(&mut colors, pixel_x, pixel_y);
                         *pixel = RGB8::new(
-                            (channel_strengths[i] * channel_cfg.color[0] as f32) as u8,
-                            (channel_strengths[i] * channel_cfg.color[1] as f32) as u8,
-                            (channel_strengths[i] * channel_cfg.color[2] as f32) as u8,
+                            (channel_strengths[i] * channel_cfg.color[0] * 255.0) as u8,
+                            (channel_strengths[i] * channel_cfg.color[1] * 255.0) as u8,
+                            (channel_strengths[i] * channel_cfg.color[2] * 255.0) as u8,
                         );
                     }
                 }
@@ -365,9 +365,9 @@ fn process_fft(samples: &[i32], config: &AppConfig) -> Box<[RGB8; TOTAL_NEOPIXEL
                 let f = calculate_channel(spectrum, &channel);
                 let clamped = f.min(1.0);
                 RGB8::new(
-                    (clamped * channel.color[0] as f32) as u8,
-                    (clamped * channel.color[1] as f32) as u8,
-                    (clamped * channel.color[2] as f32) as u8,
+                    (clamped * channel.color[0] * 255.0) as u8,
+                    (clamped * channel.color[1] * 255.0) as u8,
+                    (clamped * channel.color[2] * 255.0) as u8,
                 )
             });
 
