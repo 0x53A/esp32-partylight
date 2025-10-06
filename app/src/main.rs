@@ -6,6 +6,8 @@ mod fonts;
 #[cfg(target_arch = "wasm32")]
 mod web_bluetooth;
 
+pub use ractor_wormhole::ractor;
+
 use egui::{FontData, FontDefinitions, FontFamily};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

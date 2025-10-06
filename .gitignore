@@ -1,0 +1,14 @@
+# Build artifacts
+target/
+dist/
+
+# IDE
+.idea/
+.vscode/
+
+# Binary files
+*.zip
+app/trunk
+
+# OS files
+.DS_Store
