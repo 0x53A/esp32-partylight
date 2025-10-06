@@ -199,18 +199,18 @@ async fn gatt_events_task(
     static mut FLASH_STORAGE: Option<FlashStorage> = None;
     static mut OTA_BUFFER: [u8; 3072] = [0u8; 3072];
     
-    // Initialize flash storage on first use
-    let flash = unsafe {
+    // Initialize flash storage on first use - cast to 'static lifetime
+    let flash: &'static mut FlashStorage = unsafe {
         if FLASH_STORAGE.is_none() {
             FLASH_STORAGE = Some(FlashStorage::new());
         }
         FLASH_STORAGE.as_mut().unwrap()
     };
     
-    let buffer = unsafe { &mut OTA_BUFFER };
+    let buffer: &'static mut [u8; 3072] = unsafe { &mut OTA_BUFFER };
 
-    // Initialize OTA state
-    let mut ota_state = OtaState {
+    // Initialize OTA state with 'static lifetime
+    let mut ota_state: OtaState<'static> = OtaState {
         ota_updater: None,
         bytes_received: 0,
         expected_hash: None,
@@ -308,7 +308,7 @@ async fn gatt_events_task(
                                                 info!("[ota] OTA committed, system will restart");
                                                 // Give time for response to be sent
                                                 Timer::after_millis(100).await;
-                                                esp_hal::reset();
+                                                esp_hal::reset::software_reset();
                                                 None
                                             }
                                             Err(e) => {
@@ -495,7 +495,7 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     info!("[ota] OTA update completed successfully - restarting");
     
     // Trigger system reset
-    esp_hal::reset();
+    esp_hal::reset::software_reset();
     
     #[allow(unreachable_code)]
     Ok(())
