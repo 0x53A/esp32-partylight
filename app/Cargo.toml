@@ -30,6 +30,8 @@ postcard = "1.1.3"
 common = { path = "../common" }
 ractor_wormhole = { git = "https://github.com/0x53A/ractor-wormhole", version = "0.1.0" }
 anyhow = "1.0.100"
+getrandom = { version = "0.3.3", features = ["wasm_js"] }
+uuid = { version = "1.18.1", features = ["v4", "js"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 eframe = { version = "0.31", default-features = false, features = [ "glow" ] } # you can see the default features here: https://github.com/emilk/egui/blob/master/crates/eframe/Cargo.toml#L34
