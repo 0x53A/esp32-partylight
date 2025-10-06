@@ -40,6 +40,10 @@ jobs:
       # Cache Rust dependencies (placed before cargo install to cache installed binaries)
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app
+            mcu
 
       # Install espup for ESP Rust toolchain
       - name: Install espup
