@@ -1,10 +1,10 @@
 use common::config::*;
-use egui::{self, Button, Color32, FontId, FontFamily};
-use std::time::Duration;
-use std::sync::Arc;
-use std::rc::Rc;
+use egui::{self, Button, Color32, FontFamily, FontId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
 
 #[cfg(target_arch = "wasm32")]
 #[cfg(target_arch = "wasm32")]
@@ -17,9 +17,9 @@ use wasm_bindgen_futures::spawn_local;
 #[cfg(target_arch = "wasm32")]
 use crate::web_bluetooth::Bluetooth;
 #[cfg(target_arch = "wasm32")]
-use gloo_timers::future::IntervalStream;
-#[cfg(target_arch = "wasm32")]
 use futures_util::StreamExt;
+#[cfg(target_arch = "wasm32")]
+use gloo_timers::future::IntervalStream;
 
 pub struct PartylightApp {
     config: Option<AppConfig>,
@@ -138,7 +138,6 @@ impl PartylightApp {
             // style.visuals.widgets.inactive.bg_stroke = stroke;
             // style.visuals.widgets.hovered.bg_stroke = colors::pink_stroke();
 
-
             ctx.set_style(style);
             self.styled = true;
         }
@@ -151,10 +150,16 @@ impl PartylightApp {
                 match msg {
                     AppMessage::SetBusy(b) => self.busy = b,
                     AppMessage::Status(s) => self.last_status = s,
-                    AppMessage::Connected(cfg) => { self.conn = ConnectionStatus::Connected(cfg); },
-                    AppMessage::Broken(cfg) => { self.conn = ConnectionStatus::Broken(cfg); },
+                    AppMessage::Connected(cfg) => {
+                        self.conn = ConnectionStatus::Connected(cfg);
+                    }
+                    AppMessage::Broken(cfg) => {
+                        self.conn = ConnectionStatus::Broken(cfg);
+                    }
                     // Note: Disconnected is handled directly via ConnectionStatus in UI actions; async tasks use Broken to preserve config
-                    AppMessage::SetConfig(cfg) => { self.config = Some(cfg); },
+                    AppMessage::SetConfig(cfg) => {
+                        self.config = Some(cfg);
+                    }
                 }
             }
         }
@@ -624,7 +629,7 @@ impl PartylightApp {
                             premult: 1.0,
                             noise_gate: 0.0,
                             exponent: 1,
-                            color: [255, 255, 255],
+                            color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
                         });
                         match other {
@@ -650,7 +655,7 @@ impl PartylightApp {
                             premult: 1.0,
                             noise_gate: 0.0,
                             exponent: 1,
-                            color: [255, 255, 255],
+                            color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
                         });
                         match other {
@@ -676,7 +681,7 @@ impl PartylightApp {
                             premult: 1.0,
                             noise_gate: 0.0,
                             exponent: 1,
-                            color: [255, 255, 255],
+                            color: [1.0, 1.0, 1.0],
                             aggregate: AggregationMethod::Sum,
                         });
                         match other {
@@ -719,9 +724,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
                                 });
                             });
                         }
@@ -746,9 +751,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
                                 });
                             });
                         }
@@ -773,9 +778,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
-                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).range(0.0..=1.0));
                                 });
                             });
                         }
