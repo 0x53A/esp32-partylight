@@ -6,6 +6,8 @@ mod fonts;
 #[cfg(target_arch = "wasm32")]
 mod web_bluetooth;
 
+pub use ractor_wormhole::ractor;
+
 use egui::{FontData, FontDefinitions, FontFamily};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -40,7 +42,13 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(|cc| {
             add_fonts_to_ctx(&cc.egui_ctx);
-            Ok(Box::new(app::PartylightApp::default()))
+            match app::PartylightApp::new(&cc.egui_ctx) {
+                Ok(app) => Ok(Box::new(app)),
+                Err(e) => {
+                    eprintln!("Failed to create app: {:?}", e);
+                    Ok(Box::new(app::PartylightApp::default()))
+                }
+            }
         }),
     )
 }
@@ -73,7 +81,13 @@ fn main() {
                 web_options,
                 Box::new(|cc| {
                     add_fonts_to_ctx(&cc.egui_ctx);
-                    Ok(Box::new(app::PartylightApp::default()))
+                    match app::PartylightApp::new(&cc.egui_ctx) {
+                        Ok(app) => Ok(Box::new(app)),
+                        Err(e) => {
+                            log::error!("Failed to create app: {:?}", e);
+                            Ok(Box::new(app::PartylightApp::default()))
+                        }
+                    }
                 }),
             )
             .await;

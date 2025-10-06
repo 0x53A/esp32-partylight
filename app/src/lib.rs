@@ -1,6 +1,7 @@
 #![cfg(any(target_os = "android", target_os = "ios"))]
 
 mod app;
+mod fonts;
 
 #[cfg(target_os = "android")]
 use winit::platform::android::activity::AndroidApp;
@@ -202,14 +203,22 @@ fn _main(event_loop: EventLoop<UserEvent>) {
             .ok();
     });
 
-    add_fonts_to_ctx(ctx);
+    add_fonts_to_ctx(&ctx);
+
+    let my_app = match crate::app::PartylightApp::new(&ctx) {
+        Ok(app) => app,
+        Err(e) => {
+            eprintln!("Failed to create app: {:?}", e);
+            crate::app::PartylightApp::default()
+        }
+    };
 
     let mut app_state = AppState {
         ctx,
         state: None,
         painter: None,
         window: None,
-        my_app: crate::app::PartylightApp::default(),
+        my_app,
         repaint_signal,
     };
 
@@ -271,4 +280,71 @@ fn android_main(app: AndroidApp) {
         .build()
         .unwrap();
     stop_unwind(|| _main(event_loop));
+}
+
+fn add_fonts_to_ctx(egui_ctx: &egui::Context) {
+    use std::{collections::BTreeMap, sync::Arc};
+    use egui::{FontData, FontDefinitions, FontFamily};
+
+    let mut font_data: BTreeMap<String, Arc<FontData>> = BTreeMap::new();
+
+    let mut families = BTreeMap::new();
+
+    #[cfg(feature = "font_hack")]
+    font_data.insert(
+        "Hack".to_owned(),
+        Arc::new(FontData::from_static(crate::fonts::HACK)),
+    );
+
+    #[cfg(feature = "font_ubuntu_light")]
+    font_data.insert(
+        "Ubuntu-Light".to_owned(),
+        Arc::new(FontData::from_static(crate::fonts::UBUNTU_LIGHT)),
+    );
+
+    font_data.insert(
+        "Cynatar".to_owned(),
+        Arc::new(FontData::from_static(crate::fonts::CYNATAR)),
+    );
+
+    #[cfg(feature = "font_berkeley_mono")]
+    font_data.insert(
+        "BerkeleyMono".to_owned(),
+        Arc::new(FontData::from_static(crate::fonts::BERKELEY_MONO)),
+    );
+
+    families.insert(
+        FontFamily::Monospace,
+        vec![
+            #[cfg(feature = "font_berkeley_mono")]
+            "BerkeleyMono".to_owned(),
+            #[cfg(feature = "font_hack")]
+            "Hack".to_owned(),
+            #[cfg(feature = "font_ubuntu_light")]
+            "Ubuntu-Light".to_owned(),
+        ],
+    );
+    families.insert(
+        FontFamily::Proportional,
+        vec![
+            #[cfg(feature = "font_berkeley_mono")]
+            "BerkeleyMono".to_owned(),
+            #[cfg(feature = "font_ubuntu_light")]
+            "Ubuntu-Light".to_owned(),
+            #[cfg(feature = "font_hack")]
+            "Hack".to_owned(),
+        ],
+    );
+
+    families.insert(
+        FontFamily::Name("Cynatar".into()),
+        vec!["Cynatar".to_owned()],
+    );
+
+    let fd = FontDefinitions {
+        font_data,
+        families,
+    };
+
+    egui_ctx.set_fonts(fd);
 }
