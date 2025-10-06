@@ -17,9 +17,9 @@ pub struct ChannelConfig {
     pub premult: f32,
     pub noise_gate: f32,
     pub exponent: u8,
-    /// RGB color for this channel
-    pub color: [u8; 3],
-    pub aggregate: AggregationMethod
+    /// RGB color for this channel (0.0 - 1.0)
+    pub color: [f32; 3],
+    pub aggregate: AggregationMethod,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -719,15 +719,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    let mut r = ch.color[0] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut r));
-                                    ch.color[0] = r;
-                                    let mut g = ch.color[1] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut g));
-                                    ch.color[1] = g;
-                                    let mut b = ch.color[2] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut b));
-                                    ch.color[2] = b;
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
                                 });
                             });
                         }
@@ -752,15 +746,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    let mut r = ch.color[0] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut r));
-                                    ch.color[0] = r;
-                                    let mut g = ch.color[1] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut g));
-                                    ch.color[1] = g;
-                                    let mut b = ch.color[2] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut b));
-                                    ch.color[2] = b;
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
                                 });
                             });
                         }
@@ -785,15 +773,9 @@ impl PartylightApp {
                                     ui.label("exponent:");
                                     ui.add(egui::widgets::DragValue::new(&mut ch.exponent));
                                     ui.label("color (r,g,b):");
-                                    let mut r = ch.color[0] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut r));
-                                    ch.color[0] = r;
-                                    let mut g = ch.color[1] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut g));
-                                    ch.color[1] = g;
-                                    let mut b = ch.color[2] as u8;
-                                    ui.add(egui::widgets::DragValue::new(&mut b));
-                                    ch.color[2] = b;
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[0]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[1]).speed(0.01).clamp_range(0.0..=1.0));
+                                    ui.add(egui::widgets::DragValue::new(&mut ch.color[2]).speed(0.01).clamp_range(0.0..=1.0));
                                 });
                             });
                         }
