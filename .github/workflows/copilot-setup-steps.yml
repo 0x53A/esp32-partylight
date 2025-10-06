@@ -37,21 +37,21 @@ jobs:
           rustup target add wasm32-unknown-unknown
           rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 
-      # Cache Rust dependencies (placed before cargo install to cache installed binaries)
+      # Install espup and ESP Rust toolchain
+      - name: Install ESP Rust toolchain
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: false
+
+      # Cache Rust dependencies
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             app
             mcu
-
-      # Install espup for ESP Rust toolchain
-      - name: Install espup
-        run: cargo install espup --locked
-
-      # Setup ESP Rust toolchain using espup
-      - name: Setup ESP Rust toolchain with espup
-        run: espup install
 
       # Install trunk for web application building
       - name: Install trunk
