@@ -109,7 +109,7 @@ impl Bluetooth {
         )?;
         filters.push(&f);
         Reflect::set(&opts, &JsValue::from_str("filters"), &filters)?;
-        
+
         // Include both config service and OTA service in optionalServices
         let optional_services = Array::new();
         optional_services.push(&JsValue::from_str(SERVICE_UUID));
@@ -134,7 +134,7 @@ impl Bluetooth {
                 )?;
                 filters2.push(&f2);
                 Reflect::set(&opts2, &JsValue::from_str("filters"), &filters2)?;
-                
+
                 let optional_services2 = Array::new();
                 optional_services2.push(&JsValue::from_str(SERVICE_UUID));
                 optional_services2.push(&JsValue::from_str(OTA_SERVICE_UUID));
@@ -180,7 +180,9 @@ impl Bluetooth {
         // get config service and characteristic
         console::log_1(&JsValue::from_str("web_bluetooth: getting config service"));
         let service = Self::get_service(&server, SERVICE_UUID).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: getting config characteristic"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: getting config characteristic",
+        ));
         let cfg = Self::get_characteristic(&service, CONFIG_CHAR_UUID).await?;
         self.cfg_char = Some(cfg);
 
@@ -188,26 +190,38 @@ impl Bluetooth {
         console::log_1(&JsValue::from_str("web_bluetooth: getting OTA service"));
         match Self::get_service(&server, OTA_SERVICE_UUID).await {
             Ok(ota_service) => {
-                console::log_1(&JsValue::from_str("web_bluetooth: getting OTA control characteristic"));
-                let ota_control = Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: getting OTA control characteristic",
+                ));
+                let ota_control =
+                    Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
                 self.ota_control_char = Some(ota_control);
-                
-                console::log_1(&JsValue::from_str("web_bluetooth: getting OTA hash characteristic"));
+
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: getting OTA hash characteristic",
+                ));
                 let ota_hash = Self::get_characteristic(&ota_service, OTA_HASH_CHAR_UUID).await?;
                 self.ota_hash_char = Some(ota_hash);
-                
-                console::log_1(&JsValue::from_str("web_bluetooth: getting OTA data characteristic"));
+
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: getting OTA data characteristic",
+                ));
                 let ota_data = Self::get_characteristic(&ota_service, OTA_DATA_CHAR_UUID).await?;
                 self.ota_data_char = Some(ota_data);
-                
-                console::log_1(&JsValue::from_str("web_bluetooth: getting OTA status characteristic"));
-                let ota_status = Self::get_characteristic(&ota_service, OTA_STATUS_CHAR_UUID).await?;
+
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: getting OTA status characteristic",
+                ));
+                let ota_status =
+                    Self::get_characteristic(&ota_service, OTA_STATUS_CHAR_UUID).await?;
                 self.ota_status_char = Some(ota_status);
-                
+
                 console::log_1(&JsValue::from_str("web_bluetooth: OTA service initialized"));
             }
             Err(e) => {
-                console::log_1(&JsValue::from_str("web_bluetooth: OTA service not available (might be older firmware)"));
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: OTA service not available (might be older firmware)",
+                ));
                 console::log_1(&e);
             }
         }
@@ -228,33 +242,41 @@ impl Bluetooth {
             "web_bluetooth: reconnect gatt connected",
         ));
         self.server = Some(server.clone());
-        
+
         let service = Self::get_service(&server, SERVICE_UUID).await?;
-        console::log_1(&JsValue::from_str("web_bluetooth: reconnect got config service"));
+        console::log_1(&JsValue::from_str(
+            "web_bluetooth: reconnect got config service",
+        ));
         let cfg = Self::get_characteristic(&service, CONFIG_CHAR_UUID).await?;
         console::log_1(&JsValue::from_str(
             "web_bluetooth: reconnect got config characteristic",
         ));
         self.cfg_char = Some(cfg);
-        
+
         // Try to get OTA service
         match Self::get_service(&server, OTA_SERVICE_UUID).await {
             Ok(ota_service) => {
-                let ota_control = Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
+                let ota_control =
+                    Self::get_characteristic(&ota_service, OTA_CONTROL_CHAR_UUID).await?;
                 self.ota_control_char = Some(ota_control);
                 let ota_hash = Self::get_characteristic(&ota_service, OTA_HASH_CHAR_UUID).await?;
                 self.ota_hash_char = Some(ota_hash);
                 let ota_data = Self::get_characteristic(&ota_service, OTA_DATA_CHAR_UUID).await?;
                 self.ota_data_char = Some(ota_data);
-                let ota_status = Self::get_characteristic(&ota_service, OTA_STATUS_CHAR_UUID).await?;
+                let ota_status =
+                    Self::get_characteristic(&ota_service, OTA_STATUS_CHAR_UUID).await?;
                 self.ota_status_char = Some(ota_status);
-                console::log_1(&JsValue::from_str("web_bluetooth: reconnect got OTA service"));
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: reconnect got OTA service",
+                ));
             }
             Err(_) => {
-                console::log_1(&JsValue::from_str("web_bluetooth: OTA service not available on reconnect"));
+                console::log_1(&JsValue::from_str(
+                    "web_bluetooth: OTA service not available on reconnect",
+                ));
             }
         }
-        
+
         console::log_1(&JsValue::from_str("web_bluetooth: reconnect complete"));
         Ok(())
     }
@@ -302,29 +324,24 @@ impl Bluetooth {
     pub async fn disconnect(&mut self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: disconnect start"));
         // Try to call disconnect on the cached server or device.gatt
-        if let Some(srv) = self.server.take() {
-            if let Ok(disc) = Reflect::get(&srv, &JsValue::from_str("disconnect")) {
-                if let Ok(func) = disc.dyn_into::<Function>() {
+        if let Some(srv) = self.server.take()
+            && let Ok(disc) = Reflect::get(&srv, &JsValue::from_str("disconnect"))
+                && let Ok(func) = disc.dyn_into::<Function>() {
                     let _ = func.call0(&srv);
                     console::log_1(&JsValue::from_str(
                         "web_bluetooth: server.disconnect called",
                     ));
                 }
-            }
-        }
         // try device.gatt.disconnect() as fallback
-        if let Some(dev) = self.device.take() {
-            if let Ok(gatt) = Reflect::get(&dev, &JsValue::from_str("gatt")) {
-                if let Ok(disc) = Reflect::get(&gatt, &JsValue::from_str("disconnect")) {
-                    if let Ok(func) = disc.dyn_into::<Function>() {
+        if let Some(dev) = self.device.take()
+            && let Ok(gatt) = Reflect::get(&dev, &JsValue::from_str("gatt"))
+                && let Ok(disc) = Reflect::get(&gatt, &JsValue::from_str("disconnect"))
+                    && let Ok(func) = disc.dyn_into::<Function>() {
                         let _ = func.call0(&gatt);
                         console::log_1(&JsValue::from_str(
                             "web_bluetooth: device.gatt.disconnect called",
                         ));
                     }
-                }
-            }
-        }
 
         // clear characteristic as well
         self.cfg_char = None;
@@ -344,9 +361,12 @@ impl Bluetooth {
         if hash.length() != 32 {
             return Err(JsValue::from_str("Hash must be exactly 32 bytes"));
         }
-        
-        let char = self.ota_hash_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
-        
+
+        let char = self
+            .ota_hash_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
+
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, hash)?.dyn_into()?;
@@ -358,10 +378,13 @@ impl Bluetooth {
     /// Begin OTA update
     pub async fn ota_begin(&self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: ota_begin start"));
-        let char = self.ota_control_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
+        let char = self
+            .ota_control_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
         let cmd = Uint8Array::new_with_length(1);
         cmd.set_index(0, 0x01); // OTA_CMD_BEGIN
-        
+
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, &cmd)?.dyn_into()?;
@@ -372,9 +395,15 @@ impl Bluetooth {
 
     /// Write firmware data chunk
     pub async fn ota_write_chunk(&self, data: &Uint8Array) -> Result<(), JsValue> {
-        console::log_1(&JsValue::from_str(&format!("web_bluetooth: ota_write_chunk ({} bytes)", data.length())));
-        let char = self.ota_data_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
-        
+        console::log_1(&JsValue::from_str(&format!(
+            "web_bluetooth: ota_write_chunk ({} bytes)",
+            data.length()
+        )));
+        let char = self
+            .ota_data_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
+
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, data)?.dyn_into()?;
@@ -386,10 +415,13 @@ impl Bluetooth {
     /// Commit OTA update (device will reboot)
     pub async fn ota_commit(&self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: ota_commit start"));
-        let char = self.ota_control_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
+        let char = self
+            .ota_control_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
         let cmd = Uint8Array::new_with_length(1);
         cmd.set_index(0, 0x02); // OTA_CMD_COMMIT
-        
+
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, &cmd)?.dyn_into()?;
@@ -401,10 +433,13 @@ impl Bluetooth {
     /// Abort OTA update
     pub async fn ota_abort(&self) -> Result<(), JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: ota_abort start"));
-        let char = self.ota_control_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
+        let char = self
+            .ota_control_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
         let cmd = Uint8Array::new_with_length(1);
         cmd.set_index(0, 0x03); // OTA_CMD_ABORT
-        
+
         let write_fn = Reflect::get(char, &JsValue::from_str("writeValue"))?;
         let func: Function = write_fn.dyn_into()?;
         let promise: Promise = func.call1(char, &cmd)?.dyn_into()?;
@@ -416,22 +451,28 @@ impl Bluetooth {
     /// Read OTA status
     pub async fn ota_read_status(&self) -> Result<u8, JsValue> {
         console::log_1(&JsValue::from_str("web_bluetooth: ota_read_status start"));
-        let char = self.ota_status_char.as_ref().ok_or_else(|| JsValue::from_str("OTA not available"))?;
-        
+        let char = self
+            .ota_status_char
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("OTA not available"))?;
+
         let read_fn = Reflect::get(char, &JsValue::from_str("readValue"))?;
         let func: Function = read_fn.dyn_into()?;
         let promise: Promise = func.call0(char)?.dyn_into()?;
         let v = JsFuture::from(promise).await?;
         let buffer = Reflect::get(&v, &JsValue::from_str("buffer"))?;
         let arr = Uint8Array::new(&buffer);
-        
+
         let status = if arr.length() > 0 {
             arr.get_index(0)
         } else {
             0
         };
-        
-        console::log_1(&JsValue::from_str(&format!("web_bluetooth: ota_read_status = {}", status)));
+
+        console::log_1(&JsValue::from_str(&format!(
+            "web_bluetooth: ota_read_status = {}",
+            status
+        )));
         Ok(status)
     }
 }

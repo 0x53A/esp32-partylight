@@ -17,7 +17,7 @@ use crate::static_cell_init;
 // OTA-related imports
 use esp_bootloader_esp_idf::ota_updater::OtaUpdater;
 use esp_storage::FlashStorage;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
@@ -198,7 +198,7 @@ async fn gatt_events_task(
     // Initialize flash storage and buffer for OTA (static lifetime)
     static mut FLASH_STORAGE: Option<FlashStorage> = None;
     static mut OTA_BUFFER: [u8; 3072] = [0u8; 3072];
-    
+
     // Initialize flash storage on first use - cast to 'static lifetime
     let flash: &'static mut FlashStorage = unsafe {
         if FLASH_STORAGE.is_none() {
@@ -206,7 +206,7 @@ async fn gatt_events_task(
         }
         FLASH_STORAGE.as_mut().unwrap()
     };
-    
+
     let buffer: &'static mut [u8; 3072] = unsafe { &mut OTA_BUFFER };
 
     // Initialize OTA state with 'static lifetime
@@ -281,14 +281,16 @@ async fn gatt_events_task(
                             if byte_data.len() == 1 {
                                 let cmd = byte_data[0];
                                 info!("[gatt] OTA control command: {}", cmd);
-                                
+
                                 match cmd {
                                     OTA_CMD_BEGIN => {
                                         info!("[ota] Beginning OTA update");
                                         match begin_ota(&mut ota_state, flash, buffer) {
                                             Ok(_) => {
                                                 server.set(ota_control, &OTA_CMD_BEGIN).ok();
-                                                server.set(ota_status, &OTA_STATUS_IN_PROGRESS).ok();
+                                                server
+                                                    .set(ota_status, &OTA_STATUS_IN_PROGRESS)
+                                                    .ok();
                                                 info!("[ota] OTA update started successfully");
                                                 None
                                             }
@@ -340,23 +342,32 @@ async fn gatt_events_task(
                                 let mut hash = [0u8; 32];
                                 hash.copy_from_slice(byte_data);
                                 ota_state.expected_hash = Some(hash);
-                                
+
                                 // Update the characteristic value
-                                server.set(ota_hash, &heapless::Vec::from_slice(byte_data).unwrap()).ok();
-                                
+                                server
+                                    .set(ota_hash, &heapless::Vec::from_slice(byte_data).unwrap())
+                                    .ok();
+
                                 info!("[ota] Expected hash set: {:02x?}", &hash[..8]);
                                 None
                             } else {
-                                warn!("[ota] Invalid hash length: expected 32 bytes, got {}", byte_data.len());
+                                warn!(
+                                    "[ota] Invalid hash length: expected 32 bytes, got {}",
+                                    byte_data.len()
+                                );
                                 Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
                             }
                         } else if event.handle() == ota_data.handle {
                             let byte_data = event.data();
                             info!("[ota] Received {} bytes of firmware data", byte_data.len());
-                            
+
                             match write_ota_data(&mut ota_state, byte_data) {
                                 Ok(_) => {
-                                    info!("[ota] Wrote {} bytes (total: {})", byte_data.len(), ota_state.bytes_received);
+                                    info!(
+                                        "[ota] Wrote {} bytes (total: {})",
+                                        byte_data.len(),
+                                        ota_state.bytes_received
+                                    );
                                     None
                                 }
                                 Err(e) => {
@@ -390,19 +401,23 @@ async fn gatt_events_task(
         }
         embassy_futures::yield_now().await;
     };
-    
+
     // Clean up OTA state on disconnect
     if ota_state.ota_updater.is_some() {
         warn!("[ota] Connection closed with OTA in progress, aborting");
         abort_ota(&mut ota_state);
     }
-    
+
     info!("[gatt] disconnected: {reason:?}");
     Ok(())
 }
 
 /// Begin OTA update by initializing the OtaUpdater
-fn begin_ota<'a>(ota_state: &mut OtaState<'a>, flash: &'a mut FlashStorage, buffer: &'a mut [u8; 3072]) -> Result<(), &'static str> {
+fn begin_ota<'a>(
+    ota_state: &mut OtaState<'a>,
+    flash: &'a mut FlashStorage,
+    buffer: &'a mut [u8; 3072],
+) -> Result<(), &'static str> {
     if ota_state.ota_updater.is_some() {
         return Err("OTA already in progress");
     }
@@ -413,13 +428,13 @@ fn begin_ota<'a>(ota_state: &mut OtaState<'a>, flash: &'a mut FlashStorage, buff
     }
 
     info!("[ota] Beginning OTA update");
-    
+
     // Create OtaUpdater - it will automatically select the next partition
     let ota_updater = match OtaUpdater::new(flash, buffer) {
         Ok(updater) => updater,
         Err(_) => return Err("Failed to create OtaUpdater"),
     };
-    
+
     info!("[ota] OtaUpdater created successfully");
 
     ota_state.ota_updater = Some(ota_updater);
@@ -450,7 +465,7 @@ fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static 
     hasher.update(data);
 
     ota_state.bytes_received += data.len();
-    
+
     Ok(())
 }
 
@@ -471,7 +486,10 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
         None => return Err("Expected hash not set"),
     };
 
-    info!("[ota] Finalizing OTA update with {} bytes received", ota_state.bytes_received);
+    info!(
+        "[ota] Finalizing OTA update with {} bytes received",
+        ota_state.bytes_received
+    );
 
     // Calculate the actual hash
     let actual_hash = hasher.finalize();
@@ -486,17 +504,17 @@ fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
     }
 
     info!("[ota] Hash validation successful");
-    
+
     // Commit the update - this marks the new partition as bootable
     if let Err(_) = ota_updater.complete() {
         return Err("Failed to complete OTA update");
     }
-    
+
     info!("[ota] OTA update completed successfully - restarting");
-    
+
     // Trigger system reset
     esp_hal::reset::software_reset();
-    
+
     #[allow(unreachable_code)]
     Ok(())
 }

@@ -4,10 +4,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
-#[cfg(target_arch = "wasm32")]
-use js_sys;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
@@ -20,8 +17,6 @@ use wasm_bindgen::JsCast;
 use crate::web_bluetooth::Bluetooth;
 #[cfg(target_arch = "wasm32")]
 use futures_util::StreamExt;
-#[cfg(target_arch = "wasm32")]
-use gloo_timers::future::IntervalStream;
 
 pub struct PartylightApp {
     config: Option<AppConfig>,
@@ -233,7 +228,7 @@ impl PartylightApp {
                                                             let hb_run_token = hb_run.clone();
                                                             spawn_local(async move {
                                                                 let mut interval = gloo_timers::future::IntervalStream::new(5000);
-                                                                while let Some(_) = interval.next().await {
+                                                                while (interval.next().await).is_some() {
                                                                     // check cancellation
                                                                     if !*hb_run_token.borrow() {
                                                                         // stopped; break
@@ -253,8 +248,8 @@ impl PartylightApp {
                                                                                     let q = messages_hb.borrow();
                                                                                     q.iter().any(|m| matches!(m, AppMessage::SetConfig(_)))
                                                                                 };
-                                                                                if !has_cfg {
-                                                                                    if let Ok(jsv) = unsafe { (&*bt_clone).read_config_raw().await } {
+                                                                                if !has_cfg
+                                                                                    && let Ok(jsv) = unsafe { (&*bt_clone).read_config_raw().await } {
                                                                                         let u8arr = js_sys::Uint8Array::new(&jsv.into());
                                                                                         let mut vec = vec![0u8; u8arr.length() as usize];
                                                                                         u8arr.copy_to(&mut vec[..]);
@@ -262,7 +257,6 @@ impl PartylightApp {
                                                                                             messages_hb.borrow_mut().push_back(AppMessage::SetConfig(cfg.clone()));
                                                                                         }
                                                                                     }
-                                                                                }
                                                                                 messages_hb.borrow_mut().push_back(AppMessage::Status("Reconnected".into()));
                                                                                 // keep user edits if present, otherwise use freshly-read config
                                                                                 if let Some(cfg_msg) = {
@@ -303,7 +297,7 @@ impl PartylightApp {
                                                                 }
                                                             });
                                                         } else {
-                                                            messages.borrow_mut().push_back(AppMessage::Status(format!("Decode error: <bad postcard>")));
+                                                            messages.borrow_mut().push_back(AppMessage::Status("Decode error: <bad postcard>".to_string()));
                                                             // transition to Broken preserving last known config
                                                             let last_cfg = {
                                                                 let q = messages.borrow();
@@ -488,10 +482,10 @@ impl PartylightApp {
                                     
                                     // Create file input element
                                     use web_sys::{window, HtmlInputElement};
-                                    if let Some(window) = window() {
-                                        if let Some(document) = window.document() {
-                                            if let Ok(input) = document.create_element("input") {
-                                                if let Ok(input) = input.dyn_into::<HtmlInputElement>() {
+                                    if let Some(window) = window()
+                                        && let Some(document) = window.document()
+                                            && let Ok(input) = document.create_element("input")
+                                                && let Ok(input) = input.dyn_into::<HtmlInputElement>() {
                                                     input.set_type("file");
                                                     input.set_accept(".bin");
                                                     
@@ -503,16 +497,16 @@ impl PartylightApp {
                                                     let onchange = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::Event| {
                                                         use web_sys::FileReader;
                                                         
-                                                        if let Some(target) = event.target() {
-                                                            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
-                                                                if let Some(files) = input.files() {
-                                                                    if files.length() > 0 {
-                                                                        if let Some(file) = files.get(0) {
+                                                        if let Some(target) = event.target()
+                                                            && let Ok(input) = target.dyn_into::<HtmlInputElement>()
+                                                                && let Some(files) = input.files()
+                                                                    && files.length() > 0
+                                                                        && let Some(file) = files.get(0) {
                                                                             let messages_clone = messages.clone();
                                                                             let ctx_clone = ctx.clone();
                                                                             
                                                                             messages_clone.borrow_mut().push_back(AppMessage::SetBusy(true));
-                                                                            messages_clone.borrow_mut().push_back(AppMessage::Status(format!("Reading firmware file...")));
+                                                                            messages_clone.borrow_mut().push_back(AppMessage::Status("Reading firmware file...".to_string()));
                                                                             ctx_clone.request_repaint();
                                                                             
                                                                             // Read file
@@ -524,8 +518,8 @@ impl PartylightApp {
                                                                                 
                                                                                 let onload = wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::ProgressEvent| {
                                                                                     // File read complete - perform OTA
-                                                                                    if let Ok(result) = reader_clone.result() {
-                                                                                        if let Ok(array_buffer) = result.dyn_into::<js_sys::ArrayBuffer>() {
+                                                                                    if let Ok(result) = reader_clone.result()
+                                                                                        && let Ok(array_buffer) = result.dyn_into::<js_sys::ArrayBuffer>() {
                                                                                             let firmware_data = js_sys::Uint8Array::new(&array_buffer);
                                                                                             let firmware_len = firmware_data.length();
                                                                                             
@@ -626,7 +620,6 @@ impl PartylightApp {
                                                                                                 }
                                                                                             });
                                                                                         }
-                                                                                    }
                                                                                 }) as Box<dyn FnMut(_)>);
                                                                                 
                                                                                 reader_rc.set_onload(Some(onload.as_ref().unchecked_ref()));
@@ -635,10 +628,6 @@ impl PartylightApp {
                                                                                 let _ = reader_rc.read_as_array_buffer(&file);
                                                                             }
                                                                         }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
                                                     }) as Box<dyn FnMut(_)>);
                                                     
                                                     input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
@@ -646,9 +635,6 @@ impl PartylightApp {
                                                     
                                                     input.click();
                                                 }
-                                            }
-                                        }
-                                    }
                                 }
                             });
                         }
