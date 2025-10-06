@@ -6,7 +6,7 @@ use embassy_futures::join::join;
 use embassy_futures::select::select;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::Timer;
-use esp_hal::peripherals::BT;
+use esp_hal::peripherals::{BT, FLASH};
 use esp_radio::ble::controller::BleConnector;
 use log::{error, info, warn};
 use rand_core::{CryptoRng, RngCore};
@@ -14,16 +14,43 @@ use trouble_host::prelude::*;
 
 use crate::static_cell_init;
 
+// OTA-related imports
+use esp_bootloader_esp_idf::ota_updater::OtaUpdater;
+use esp_storage::FlashStorage;
+use sha2::{Digest, Sha256};
+
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 
 /// Max number of L2CAP channels.
 const L2CAP_CHANNELS_MAX: usize = 2; // Signal + att
 
+/// OTA control commands
+const OTA_CMD_BEGIN: u8 = 0x01;
+const OTA_CMD_COMMIT: u8 = 0x02;
+const OTA_CMD_ABORT: u8 = 0x03;
+
+/// OTA status codes
+const OTA_STATUS_IDLE: u8 = 0x00;
+const OTA_STATUS_IN_PROGRESS: u8 = 0x01;
+const OTA_STATUS_SUCCESS: u8 = 0x02;
+const OTA_STATUS_ERROR: u8 = 0x03;
+
+/// OTA state
+struct OtaStateInner<'a> {
+    ota_updater: Option<OtaUpdater<'a, FlashStorage<'a>>>,
+    bytes_received: usize,
+    expected_hash: Option<[u8; 32]>,
+    hasher: Option<Sha256>,
+}
+
+type OtaState = OtaStateInner<'static>;
+
 // GATT Server definition
 #[gatt_server]
 struct Server {
     config_service: ConfigService,
+    ota_service: OtaService,
 }
 
 ///
@@ -39,10 +66,37 @@ struct ConfigService {
     config_data: heapless::Vec<u8, 200>,
 }
 
+/// OTA Service for firmware updates over Bluetooth
+#[gatt_service(uuid = "c6e7a9f0-1b34-4c5d-8f6e-2a3b4c5d6e7f")]
+struct OtaService {
+    /// OTA Control characteristic - used to start, commit, or abort OTA
+    /// Write: 0x01 = begin OTA, 0x02 = commit, 0x03 = abort
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_control", read, value = "OTA Control")]
+    #[characteristic(uuid = "d7f8b0e1-2c45-5d6e-9f7a-3b4c5d6e7f80", write, read)]
+    ota_control: u8,
+
+    /// OTA Hash characteristic - expected SHA256 hash of firmware (32 bytes)
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_hash", read, value = "OTA Expected Hash")]
+    #[characteristic(uuid = "a0e1f2c3-5d6e-7f80-91a2-b3c4d5e6f7a8", write, read)]
+    ota_hash: heapless::Vec<u8, 32>,
+
+    /// OTA Data characteristic - receives firmware data chunks
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_data", read, value = "OTA Data")]
+    #[characteristic(uuid = "e8f9c1d2-3d56-6e7f-a08b-4c5d6e7f8091", write)]
+    ota_data: heapless::Vec<u8, 512>,
+
+    /// OTA Status characteristic - reports current status
+    /// 0x00 = idle, 0x01 = in progress, 0x02 = success, 0x03 = error
+    #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, name = "ota_status", read, value = "OTA Status")]
+    #[characteristic(uuid = "f9d0e2c3-4e67-7f80-b19c-5d6e7f809102", read, notify)]
+    ota_status: u8,
+}
+
 /// Run the BLE stack.
 pub async fn run<C, RNG>(
     controller: C,
     random_generator: &mut RNG,
+    flash: &'static FLASH<'static>,
     config_signal: &Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) where
@@ -85,7 +139,7 @@ pub async fn run<C, RNG>(
             match advertise("Diskomator", &mut peripheral, &server).await {
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
-                    let a = gatt_events_task(&server, &conn, config_signal);
+                    let a = gatt_events_task(&server, &conn, &flash, config_signal);
                     let b = custom_task(&server, &conn, &stack);
                     // run until any task ends (usually because the connection has been closed),
                     // then return to advertising state.
@@ -135,10 +189,50 @@ async fn ble_task<C: Controller, P: PacketPool>(mut runner: Runner<'_, C, P>) {
 async fn gatt_events_task(
     server: &Server<'_>,
     conn: &GattConnection<'_, '_, DefaultPacketPool>,
+    flash: &'static FLASH<'static>,
     config_signal: &Signal<CriticalSectionRawMutex, common::config::AppConfig>,
 ) -> Result<(), Error> {
     let config_version = &server.config_service.config_version;
     let config_data = &server.config_service.config_data;
+    let ota_control = &server.ota_service.ota_control;
+    let ota_hash = &server.ota_service.ota_hash;
+    let ota_data = &server.ota_service.ota_data;
+    let ota_status = &server.ota_service.ota_status;
+
+    // Initialize flash storage and buffer for OTA (static lifetime)
+    static mut FLASH_STORAGE: Option<FlashStorage<'static>> = None;
+    static mut OTA_BUFFER: [u8; 3072] = [0u8; 3072];
+
+    // Initialize flash storage on first use and move ownership
+    static mut FLASH_TAKEN: bool = false;
+    
+    let (flash_storage_option, buffer_option): (Option<&'static mut FlashStorage<'static>>, Option<&'static mut [u8; 3072]>) = unsafe {
+        if !FLASH_TAKEN {
+            FLASH_TAKEN = true;
+            // Take ownership by creating FlashStorage from the flash peripheral
+            // We can only do this once
+            let flash_ptr = flash as *const FLASH as *mut FLASH;
+            let flash_owned = core::ptr::read(flash_ptr);
+            FLASH_STORAGE = Some(FlashStorage::new(flash_owned));
+            // Use addr_of_mut! to avoid static_mut_refs lint
+            (unsafe { (*core::ptr::addr_of_mut!(FLASH_STORAGE)).as_mut() }, 
+             Some(unsafe { &mut *core::ptr::addr_of_mut!(OTA_BUFFER) }))
+        } else {
+            (None, None)
+        }
+    };
+    
+    let mut flash_storage_option = flash_storage_option;
+    let mut buffer_option = buffer_option;
+
+    // Initialize OTA state
+    let mut ota_state: OtaState = OtaStateInner {
+        ota_updater: None,
+        bytes_received: 0,
+        expected_hash: None,
+        hasher: None,
+    };
+
     let reason = loop {
         match conn.next().await {
             GattConnectionEvent::Disconnected { reason } => break reason,
@@ -157,6 +251,15 @@ async fn gatt_events_task(
                         } else if event.handle() == config_data.handle {
                             let value = server.get(config_data);
                             info!("[gatt] Read config_data: {value:?}");
+                        } else if event.handle() == ota_control.handle {
+                            let value = server.get(ota_control);
+                            info!("[gatt] Read ota_control: {value:?}");
+                        } else if event.handle() == ota_hash.handle {
+                            let value = server.get(ota_hash);
+                            info!("[gatt] Read ota_hash: {value:?}");
+                        } else if event.handle() == ota_status.handle {
+                            let value = server.get(ota_status);
+                            info!("[gatt] Read ota_status: {value:?}");
                         }
                         None
                     }
@@ -189,6 +292,118 @@ async fn gatt_events_task(
                                 warn!("[gatt] Invalid Data in config data");
                                 Some(AttErrorCode::VALUE_NOT_ALLOWED)
                             }
+                        } else if event.handle() == ota_control.handle {
+                            let byte_data = event.data();
+                            if byte_data.len() == 1 {
+                                let cmd = byte_data[0];
+                                info!("[gatt] OTA control command: {}", cmd);
+
+                                match cmd {
+                                    OTA_CMD_BEGIN => {
+                                        info!("[ota] Beginning OTA update");
+                                        // Take ownership of flash_storage and buffer
+                                        let flash_storage = flash_storage_option.take();
+                                        let buffer = buffer_option.take();
+                                        
+                                        if let (Some(fs), Some(buf)) = (flash_storage, buffer) {
+                                            match begin_ota(&mut ota_state, fs, buf) {
+                                                Ok(_) => {
+                                                    server.set(ota_control, &OTA_CMD_BEGIN).ok();
+                                                    server
+                                                        .set(ota_status, &OTA_STATUS_IN_PROGRESS)
+                                                        .ok();
+                                                    info!("[ota] OTA update started successfully");
+                                                    None
+                                                }
+                                                Err(e) => {
+                                                    error!("[ota] Failed to begin OTA: {:?}", e);
+                                                    server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                                    Some(AttErrorCode::UNLIKELY_ERROR)
+                                                }
+                                            }
+                                        } else {
+                                            error!("[ota] Flash storage already in use");
+                                            server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                            Some(AttErrorCode::UNLIKELY_ERROR)
+                                        }
+                                    }
+                                    OTA_CMD_COMMIT => {
+                                        info!("[ota] Committing OTA update");
+                                        match commit_ota(&mut ota_state) {
+                                            Ok(_) => {
+                                                server.set(ota_control, &OTA_CMD_COMMIT).ok();
+                                                server.set(ota_status, &OTA_STATUS_SUCCESS).ok();
+                                                info!("[ota] OTA committed - new firmware marked bootable");
+                                                info!("[ota] Resetting device to boot into new firmware");
+                                                // Give time for response to be sent
+                                                Timer::after_millis(100).await;
+                                                // Trigger reset to boot into new firmware
+                                                esp_hal::rom::software_reset();
+                                            }
+                                            Err(e) => {
+                                                error!("[ota] Failed to commit OTA: {:?}", e);
+                                                server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                                Some(AttErrorCode::UNLIKELY_ERROR)
+                                            }
+                                        }
+                                    }
+                                    OTA_CMD_ABORT => {
+                                        info!("[ota] Aborting OTA update");
+                                        abort_ota(&mut ota_state);
+                                        server.set(ota_control, &OTA_CMD_ABORT).ok();
+                                        server.set(ota_status, &OTA_STATUS_IDLE).ok();
+                                        None
+                                    }
+                                    _ => {
+                                        warn!("[ota] Unknown OTA control command: {}", cmd);
+                                        Some(AttErrorCode::VALUE_NOT_ALLOWED)
+                                    }
+                                }
+                            } else {
+                                warn!("[ota] Invalid OTA control data length");
+                                Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
+                            }
+                        } else if event.handle() == ota_hash.handle {
+                            let byte_data = event.data();
+                            if byte_data.len() == 32 {
+                                let mut hash = [0u8; 32];
+                                hash.copy_from_slice(byte_data);
+                                ota_state.expected_hash = Some(hash);
+
+                                // Update the characteristic value
+                                server
+                                    .set(ota_hash, &heapless::Vec::from_slice(byte_data).unwrap())
+                                    .ok();
+
+                                info!("[ota] Expected hash set: {:02x?}", &hash[..8]);
+                                None
+                            } else {
+                                warn!(
+                                    "[ota] Invalid hash length: expected 32 bytes, got {}",
+                                    byte_data.len()
+                                );
+                                Some(AttErrorCode::INVALID_ATTRIBUTE_VALUE_LENGTH)
+                            }
+                        } else if event.handle() == ota_data.handle {
+                            let byte_data = event.data();
+                            info!("[ota] Received {} bytes of firmware data", byte_data.len());
+
+                            match write_ota_data(&mut ota_state, byte_data) {
+                                Ok(_) => {
+                                    info!(
+                                        "[ota] Wrote {} bytes (total: {})",
+                                        byte_data.len(),
+                                        ota_state.bytes_received
+                                    );
+                                    None
+                                }
+                                Err(e) => {
+                                    error!("[ota] Failed to write OTA data: {:?}", e);
+                                    server.set(ota_status, &OTA_STATUS_ERROR).ok();
+                                    abort_ota(&mut ota_state);
+                                    Some(AttErrorCode::UNLIKELY_ERROR)
+                                }
+                            }
                         } else {
                             info!("[gatt] Write to unknown handle");
                             None
@@ -213,8 +428,147 @@ async fn gatt_events_task(
         }
         embassy_futures::yield_now().await;
     };
+
+    // Clean up OTA state on disconnect
+    if ota_state.ota_updater.is_some() {
+        warn!("[ota] Connection closed with OTA in progress, aborting");
+        abort_ota(&mut ota_state);
+    }
+
     info!("[gatt] disconnected: {reason:?}");
     Ok(())
+}
+
+/// Begin OTA update by initializing the OtaUpdater
+fn begin_ota(
+    ota_state: &mut OtaState,
+    flash: &'static mut FlashStorage<'static>,
+    buffer: &'static mut [u8; 3072],
+) -> Result<(), &'static str> {
+    if ota_state.ota_updater.is_some() {
+        return Err("OTA already in progress");
+    }
+
+    // Check if hash is set
+    if ota_state.expected_hash.is_none() {
+        return Err("Expected hash not set");
+    }
+
+    info!("[ota] Beginning OTA update");
+
+    // Create OtaUpdater
+    let mut ota_updater = match OtaUpdater::new(flash, buffer) {
+        Ok(updater) => updater,
+        Err(_) => return Err("Failed to create OtaUpdater"),
+    };
+
+    info!("[ota] OtaUpdater created successfully");
+
+    // Erase the next partition
+    let erase_result = ota_updater.with_next_partition(|mut flash_region, subtype| {
+        info!("[ota] Selected partition: {:?}", subtype);
+        
+        // Erase the partition (1MB as defined in partitions.csv)
+        use embedded_storage::nor_flash::NorFlash;
+        let size = 0x100000u32; // 1MB
+        match flash_region.erase(0, size) {
+            Ok(_) => {
+                info!("[ota] Partition erased successfully");
+                Ok(())
+            }
+            Err(_) => Err("Failed to erase partition"),
+        }
+    });
+
+    match erase_result {
+        Ok(Ok(_)) => {},
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err("Failed to access partition"),
+    }
+
+    // Store the OtaUpdater
+    ota_state.ota_updater = Some(ota_updater);
+    ota_state.bytes_received = 0;
+    ota_state.hasher = Some(Sha256::new());
+
+    info!("[ota] OTA update ready");
+
+    Ok(())
+}
+
+
+/// Write firmware data chunk to OTA partition
+fn write_ota_data(ota_state: &mut OtaState, data: &[u8]) -> Result<(), &'static str> {
+    let ota_updater = ota_state.ota_updater.as_mut().ok_or("OTA not in progress")?;
+    let offset = ota_state.bytes_received as u32;
+
+    // Write data to the next partition
+    let write_result = ota_updater.with_next_partition(|mut flash_region, _subtype| {
+        use embedded_storage::nor_flash::NorFlash;
+        match flash_region.write(offset, data) {
+            Ok(_) => Ok(()),
+            Err(_) => Err("Failed to write to flash"),
+        }
+    });
+
+    match write_result {
+        Ok(Ok(_)) => {},
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err("Failed to access partition"),
+    }
+
+    // Update hash
+    if let Some(ref mut hasher) = ota_state.hasher {
+        hasher.update(data);
+    }
+
+    ota_state.bytes_received += data.len();
+
+    Ok(())
+}
+
+/// Commit OTA update after verifying hash
+fn commit_ota(ota_state: &mut OtaState) -> Result<(), &'static str> {
+    let mut ota_updater = ota_state.ota_updater.take().ok_or("No OTA update in progress")?;
+
+    // Get the expected hash
+    let expected_hash = ota_state.expected_hash.ok_or("No expected hash set")?;
+
+    // Finalize and get the hash
+    let hasher = ota_state.hasher.take().ok_or("No hasher available")?;
+    let actual_hash = hasher.finalize();
+    let actual_hash_bytes: [u8; 32] = actual_hash.into();
+
+    // Compare hashes
+    if actual_hash_bytes != expected_hash {
+        error!("[ota] Hash mismatch!");
+        error!("[ota] Expected: {:02x?}", expected_hash);
+        error!("[ota] Actual:   {:02x?}", actual_hash_bytes);
+        return Err("Hash validation failed");
+    }
+
+    info!("[ota] Hash validation successful");
+
+    // Activate the next partition to make it bootable
+    if let Err(_) = ota_updater.activate_next_partition() {
+        return Err("Failed to activate partition");
+    }
+
+    info!("[ota] OTA update completed successfully - new firmware marked bootable");
+    info!("[ota] Resetting device...");
+
+    // Trigger software reset - this function never returns
+    esp_hal::rom::software_reset()
+}
+
+/// Abort OTA update and clean up
+fn abort_ota(ota_state: &mut OtaState) {
+    // Clear OTA state
+    ota_state.ota_updater = None;
+    ota_state.bytes_received = 0;
+    ota_state.hasher = None;
+    ota_state.expected_hash = None;
+    info!("[ota] OTA update aborted");
 }
 
 /// Create an advertiser to use to connect to a BLE Central, and wait for it to connect.
@@ -286,6 +640,7 @@ async fn custom_task<C: Controller, P: PacketPool>(
 #[embassy_executor::task]
 async fn bluetooth_task(
     bt: BT<'static>,
+    flash: FLASH<'static>,
     config_signal: &'static Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) {
@@ -298,14 +653,18 @@ async fn bluetooth_task(
     let connector = BleConnector::new(radio, bt);
     let controller: ExternalController<_, 20> = ExternalController::new(connector);
 
-    run(controller, &mut rng, config_signal, initial_config).await;
+    // Store flash in a static cell so we can get a 'static reference
+    let flash_ref = static_cell_init!(FLASH<'static>, flash);
+
+    run(controller, &mut rng, flash_ref, config_signal, initial_config).await;
 }
 
 pub fn init_bluetooth(
     spawner: &Spawner,
     bt: BT<'static>,
+    flash: FLASH<'static>,
     config_signal: &'static Signal<CriticalSectionRawMutex, common::config::AppConfig>,
     initial_config: AppConfig,
 ) -> Result<(), embassy_executor::SpawnError> {
-    spawner.spawn(bluetooth_task(bt, config_signal, initial_config))
+    spawner.spawn(bluetooth_task(bt, flash, config_signal, initial_config))
 }
