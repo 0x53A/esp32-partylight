@@ -52,7 +52,16 @@ jobs:
       # Setup ESP Rust toolchain using espup
       - name: Setup ESP Rust toolchain with espup
         run: espup install
+        continue-on-error: true
 
       # Install trunk for web application building
       - name: Install trunk
         run: cargo install --locked trunk
+
+      # Smoke test: Verify app can be checked
+      - name: Smoke test - Check app compilation
+        run: cd app && cargo check --target wasm32-unknown-unknown
+
+      # Smoke test: Verify mcu can be checked
+      - name: Smoke test - Check mcu compilation
+        run: cd mcu && cargo +esp check
