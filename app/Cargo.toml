@@ -48,7 +48,13 @@ web-sys = { version = "0.3.77", features = [
     "BlobPropertyBag",
     "Blob",
     "Performance",
-    "Window"
+    "Window",
+    "HtmlInputElement",
+    "File",
+    "FileReader",
+    "ProgressEvent",
+    "Crypto",
+    "SubtleCrypto",
   ] }
 
   gloo-timers = { version = "0.3", features = ["futures"] }

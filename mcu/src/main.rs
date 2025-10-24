@@ -129,7 +129,7 @@ async fn _main(spawner: Spawner) -> Result<!> {
 
     // Start Bluetooth task
     info!("[main] Starting Bluetooth task ...");
-    bluetooth::init_bluetooth(&spawner, peripherals.BT, config_signal, initial_config)
+    bluetooth::init_bluetooth(&spawner, peripherals.BT, peripherals.FLASH, config_signal, initial_config)
         .map_err(|e| error_with_location!("Failed to start Bluetooth task: {:?}", e))?;
     for _ in 0..10 {
         embassy_futures::yield_now().await;
