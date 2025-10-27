@@ -8,6 +8,13 @@ pub enum AggregationMethod {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Filter {
+    None,
+    MovingAverage,
+    ExponentialMovingAverage,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChannelConfig {
     /// index into the FFT array, inclusive
     pub start_index: usize,
@@ -20,6 +27,7 @@ pub struct ChannelConfig {
     /// RGB color for this channel (0.0 - 1.0)
     pub color: [f32; 3],
     pub aggregate: AggregationMethod,
+    pub filter: Filter,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

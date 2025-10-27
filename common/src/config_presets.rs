@@ -16,6 +16,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 2,
@@ -25,6 +26,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 11,
@@ -34,6 +36,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 16,
@@ -43,6 +46,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
             ]),
         }
@@ -63,6 +67,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 0.0, 0.0], // Red
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 3,
@@ -72,6 +77,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 0.498, 0.0], // Orange
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 5,
@@ -81,6 +87,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 1.0, 0.0], // Yellow
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 8,
@@ -90,6 +97,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 1.0, 0.0], // Green
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 11,
@@ -99,6 +107,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 1.0, 1.0], // Cyan
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 15,
@@ -108,6 +117,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 0.0, 1.0], // Blue
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 19,
@@ -117,6 +127,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.498, 0.0, 1.0], // Purple
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 23,
@@ -126,6 +137,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 0.0, 1.0], // Magenta
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
             ]),
         }
@@ -146,6 +158,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 5,
@@ -155,6 +168,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 11,
@@ -164,6 +178,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 16,
@@ -173,6 +188,7 @@ impl AppConfig {
                     exponent: 6,
                     color: [1.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
             ]),
         }
@@ -195,6 +211,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [1.0, 0.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 2,
@@ -204,6 +221,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [1.0, 0.498, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 4,
@@ -213,6 +231,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [1.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 6,
@@ -222,6 +241,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [0.0, 1.0, 0.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 11,
@@ -231,6 +251,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [0.0, 1.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 15,
@@ -240,6 +261,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [0.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 19,
@@ -249,6 +271,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [0.498, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
                 ChannelConfig {
                     start_index: 23,
@@ -258,6 +281,7 @@ impl AppConfig {
                     exponent: 1,
                     color: [1.0, 0.0, 1.0],
                     aggregate: AggregationMethod::Sum,
+                    filter: Filter::None,
                 },
             ]),
         }
