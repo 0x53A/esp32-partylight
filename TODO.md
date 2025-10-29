@@ -5,3 +5,5 @@ We only allow a single client at a time, so should be trivial to implement.
 There is also a third characteristic that allows reading recent log entries and errors.
 
 The fixed operations (premult, noise-gate, etc) could be replaced by an array of "Operations".
+
+WebUSB descriptors.

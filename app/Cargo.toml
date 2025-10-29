@@ -28,6 +28,9 @@ ordered-float = "5.0.0"
 rustfft = { version = "6.2.0", features = ["wasm_simd"] }
 postcard = "1.1.3"
 common = { path = "../common" }
+ractor_wormhole = { git = "https://github.com/0x53A/ractor-wormhole", branch = "dev-threadlocal_start_instant" }
+#ractor_wormhole = { path = "../../ractor-wormhole/ractor_wormhole" }
+web-time = "1.1.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 eframe = { version = "0.31", default-features = false, features = [ "glow" ] } # you can see the default features here: https://github.com/emilk/egui/blob/master/crates/eframe/Cargo.toml#L34
@@ -50,9 +53,10 @@ web-sys = { version = "0.3.77", features = [
     "Performance",
     "Window"
   ] }
-
-  gloo-timers = { version = "0.3", features = ["futures"] }
-  futures-util = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
+futures-util = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1.18.1", features = ["js"] }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 eframe = { version = "0.31.1", default-features = false, features = [ "glow" ] } # you can see the default features here: https://github.com/emilk/egui/blob/master/crates/eframe/Cargo.toml#L34
@@ -66,6 +70,10 @@ winit = { version = "0.30", features = ["android-native-activity"] }
 wgpu = "25.0"
 pollster = "0.4"
 android_logger = "0.15"
+
+
+[patch.crates-io]
+ractor = { git = "https://github.com/0x53A/ractor", branch = "dev-thread_local_actor_spawn_instant" }
 
 
 [features]

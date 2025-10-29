@@ -63,6 +63,7 @@ defmt = "1.0.1"
 log = "0.4.28"
 rtt-target = { version = "0.6.1", features = ["log"] }
 postcard = { version = "1.1.3", features = ["postcard-derive"] }
+embassy-usb = "0.5.1"
 
 
 
@@ -96,6 +97,7 @@ trouble-host = { git = "https://github.com/embassy-rs/trouble" }
 [features]
 default = ["bluetooth"]
 bluetooth = []
+fake-i2s = []
 
 
 [profile.release]

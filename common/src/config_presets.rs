@@ -6,7 +6,7 @@ impl AppConfig {
             config_version: CONFIG_VERSION,
             sample_count: 256,
             fft_size: FFTSize::Size512,
-            use_hann_window: false,
+            use_hann_window: true,
             pattern: NeopixelMatrixPattern::Stripes([
                 ChannelConfig {
                     start_index: 1,
@@ -53,7 +53,7 @@ impl AppConfig {
             config_version: CONFIG_VERSION,
             sample_count: 256,
             fft_size: FFTSize::Size512,
-            use_hann_window: false,
+            use_hann_window: true,
             pattern: NeopixelMatrixPattern::Bars([
                 ChannelConfig {
                     start_index: 1,
@@ -136,7 +136,7 @@ impl AppConfig {
             config_version: CONFIG_VERSION,
             sample_count: 256,
             fft_size: FFTSize::Size512,
-            use_hann_window: false,
+            use_hann_window: true,
             pattern: NeopixelMatrixPattern::Quarters([
                 ChannelConfig {
                     start_index: 1,
@@ -185,7 +185,7 @@ impl AppConfig {
             config_version: CONFIG_VERSION,
             sample_count: 256,
             fft_size: FFTSize::Size512,
-            use_hann_window: false,
+            use_hann_window: true,
             pattern: NeopixelMatrixPattern::Bars([
                 ChannelConfig {
                     start_index: 1,

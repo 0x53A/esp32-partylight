@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(never_type)]
+#![feature(generic_atomic)]
 //#![feature(generic_const_exprs)]
 
 extern crate alloc;
@@ -22,7 +23,7 @@ use esp_hal::{
     timer::{AnyTimer, timg::TimerGroup},
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result};
 
 use esp_hal::peripherals::Peripherals;
 
@@ -35,6 +36,7 @@ use rtt_target::{ChannelMode, rprintln, rtt_init_print};
 mod bluetooth;
 mod lights;
 pub mod util;
+mod usb_audio;
 
 mod ws2812;
 
@@ -162,15 +164,66 @@ async fn _main(spawner: Spawner) -> Result<!> {
     //     .with_rx(peripherals.GPIO17)
     //     .with_tx(peripherals.GPIO8);
 
-    // I2S setup
-    let i2s_peripherals = I2sPeripherals {
-        i2s0: peripherals.I2S0,
-        dma_ch0: peripherals.DMA_CH0,
-        gpio0: peripherals.GPIO0,
-        gpio4: peripherals.GPIO4,
-        gpio6: peripherals.GPIO6,
-        gpio5: peripherals.GPIO5,
+    // Choose between USB Audio or I2S input
+    const USE_USB_AUDIO: bool = true;
+
+    // I2S peripherals declaration (needed for both branches)
+    let i2s_peripherals = if !USE_USB_AUDIO {
+        Some(I2sPeripherals {
+            i2s0: peripherals.I2S0,
+            dma_ch0: peripherals.DMA_CH0,
+            gpio0: peripherals.GPIO0,
+            gpio4: peripherals.GPIO4,
+            gpio6: peripherals.GPIO6,
+            gpio5: peripherals.GPIO5,
+        })
+    } else {
+        None
     };
+
+    if USE_USB_AUDIO {
+        // USB Audio setup
+        log::info!("[main] Initializing USB Audio...");
+        
+        // Create a static channel for passing audio data from USB to audio processing
+        use embassy_sync::channel;
+        type AudioChannel = channel::Channel<
+            embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+            Box<[u8; 2048]>,
+            4,
+        >;
+        type AudioSender<'a> = channel::Sender<'a, embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Box<[u8; 2048]>, 4>;
+        type AudioReceiver<'a> = channel::Receiver<'a, embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Box<[u8; 2048]>, 4>;
+        
+        static AUDIO_BUFFER_CHANNEL: StaticCell<AudioChannel> = StaticCell::new();
+        static AUDIO_SENDER: StaticCell<AudioSender<'static>> = StaticCell::new();
+        static AUDIO_RECEIVER: StaticCell<AudioReceiver<'static>> = StaticCell::new();
+        
+        let audio_channel = &*AUDIO_BUFFER_CHANNEL.init(channel::Channel::new());
+        let audio_sender = AUDIO_SENDER.init(audio_channel.sender());
+        let audio_receiver = AUDIO_RECEIVER.init(audio_channel.receiver());
+        
+        // ESP32-S3 USB OTG uses GPIO19 and GPIO20
+        usb_audio::init_usb_audio(
+            &spawner,
+            peripherals.USB0,
+            peripherals.GPIO20,
+            peripherals.GPIO19,
+            audio_sender,
+        )
+        .map_err(|e| error_with_location!("Failed to initialize USB audio: {:?}", e))?;
+        
+        // Start USB audio processing task
+        spawner
+            .spawn(lights::usb_audio_processing_task(
+                audio_receiver,
+                neopixel_signal,
+                config_signal,
+            ))
+            .map_err(|e| error_with_location!("Failed to spawn USB audio processing task: {:?}", e))?;
+        
+        log::info!("[main] USB Audio initialized");
+    }
 
     let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
     let _guard = cpu_control
@@ -181,14 +234,16 @@ async fn _main(spawner: Spawner) -> Result<!> {
                 // start Neopixel task
                 spawner.spawn(neopixel_task(spi, neopixel_signal)).ok();
 
-                // Start audio processing task
-                spawner
-                    .spawn(audio_processing_task(
-                        i2s_peripherals,
-                        neopixel_signal,
-                        config_signal,
-                    ))
-                    .ok();
+                // Start I2S audio processing task if not using USB audio
+                if let Some(peripherals) = i2s_peripherals {
+                    spawner
+                        .spawn(audio_processing_task(
+                            peripherals,
+                            neopixel_signal,
+                            config_signal,
+                        ))
+                        .ok();
+                }
             });
         })
         .unwrap();

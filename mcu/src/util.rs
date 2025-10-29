@@ -10,10 +10,10 @@ use rtt_target::rprintln;
 #[macro_export]
 macro_rules! error_with_location {
     ($msg:expr) => {
-        anyhow!("{} at {}:{}", $msg, file!(), line!())
+        ::anyhow::anyhow!("{} at {}:{}", $msg, file!(), line!())
     };
     ($fmt:expr, $($arg:tt)*) => {
-        anyhow!("{} at {}:{}", format!($fmt, $($arg)*), file!(), line!())
+        ::anyhow::anyhow!("{} at {}:{}", format!($fmt, $($arg)*), file!(), line!())
     };
 }
 
