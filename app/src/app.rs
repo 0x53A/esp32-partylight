@@ -1,5 +1,5 @@
 use common::config::*;
-use egui::{self, Button, Color32, FontFamily, FontId};
+use egui::{self, Button, Color32, FontFamily, FontId, CollapsingHeader};
 use ractor_wormhole::ractor::ActorRef;
 use ractor_wormhole::ractor::thread_local::ThreadLocalActorSpawner;
 use std::sync::{Arc, Mutex};
@@ -702,7 +702,7 @@ impl PartylightApp {
     }
     
     fn draw_channel_editor(&self, ui: &mut egui::Ui, index: usize, ch: &mut ChannelConfig, label: &str) {
-        ui.collapsing(format!("{} {}", label, index), |ui| {
+        CollapsingHeader::new(format!("{} {}", label, index)).default_open(true).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label("start:");
                 ui.add(egui::widgets::DragValue::new(&mut ch.start_index));
