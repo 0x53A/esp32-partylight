@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use core::sync::atomic::{Atomic, AtomicU32, Ordering};
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::zerocopy_channel;
@@ -6,14 +7,16 @@ use embassy_usb::class::uac1;
 use embassy_usb::class::uac1::speaker::{self, Speaker, Volume};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, UsbDevice};
-use esp_hal::otg_fs::{Usb, asynch::{Driver as UsbDriver, Config as UsbConfig}};
+use esp_hal::otg_fs::{
+    Usb,
+    asynch::{Config as UsbConfig, Driver as UsbDriver},
+};
 use esp_hal::peripherals;
 use heapless::Vec;
 use static_cell::StaticCell;
-use core::sync::atomic::{Atomic, AtomicU32, Ordering};
 
-use anyhow::Result;
 use crate::error_with_location;
+use anyhow::Result;
 
 // Stereo input
 pub const INPUT_CHANNEL_COUNT: usize = 2;
@@ -31,10 +34,8 @@ pub const SAMPLE_SIZE_PER_S: usize = (SAMPLE_RATE_HZ as usize) * INPUT_CHANNEL_C
 pub const USB_FRAME_SIZE: usize = SAMPLE_SIZE_PER_S.div_ceil(1000);
 
 // Select front left and right audio channels.
-pub const AUDIO_CHANNELS: [uac1::Channel; INPUT_CHANNEL_COUNT] = [
-    uac1::Channel::LeftFront,
-    uac1::Channel::RightFront,
-];
+pub const AUDIO_CHANNELS: [uac1::Channel; INPUT_CHANNEL_COUNT] =
+    [uac1::Channel::LeftFront, uac1::Channel::RightFront];
 
 // For ESP32-S3, use a more conservative packet size
 // Full-speed USB typically supports up to 1023 bytes for isochronous endpoints
@@ -97,14 +98,14 @@ async fn feedback_handler<'d>(
         // The feedback value tells the host how many samples we're consuming
         // For 48kHz with 10.14 format: 48 << 14 = 786432
         let feedback_value = (SAMPLE_RATE_HZ << 14) / 1000; // Per frame (1ms)
-        
+
         packet.clear();
         packet.push(feedback_value as u8).unwrap();
         packet.push((feedback_value >> 8) as u8).unwrap();
         packet.push((feedback_value >> 16) as u8).unwrap();
 
         feedback.write_packet(&packet).await?;
-        
+
         // Send feedback every FEEDBACK_REFRESH_PERIOD (8 frames = 8ms)
         embassy_time::Timer::after(embassy_time::Duration::from_millis(8)).await;
     }
@@ -158,25 +159,25 @@ pub async fn usb_audio_receiver_task(
 ) {
     loop {
         let samples = usb_audio_receiver.receive().await;
-        
+
         // Get current volume settings (stored as f32 bit patterns)
         let vol_left = VOLUME_LEFT.load(Ordering::Relaxed);
         let vol_right = VOLUME_RIGHT.load(Ordering::Relaxed);
         let scale_left = u32_to_scale(vol_left);
         let scale_right = u32_to_scale(vol_right);
-        
+
         // USB audio samples are already interleaved stereo: [L, R, L, R, ...]
         // Each sample is a u32 (4 bytes)
         // Apply volume scaling and convert to bytes
         let mut buffer = Box::new([0u8; 2048]);
         let mut buffer_pos = 0;
-        
+
         for (i, sample) in samples.iter().enumerate() {
             if buffer_pos + 4 <= buffer.len() {
                 // Apply volume: left channel on even indices, right channel on odd
                 let scale = if i % 2 == 0 { scale_left } else { scale_right };
                 let scaled_sample = apply_volume(*sample, scale);
-                
+
                 let sample_bytes = scaled_sample.to_le_bytes();
                 buffer[buffer_pos..buffer_pos + 4].copy_from_slice(&sample_bytes);
                 buffer_pos += 4;
@@ -184,7 +185,7 @@ pub async fn usb_audio_receiver_task(
                 break;
             }
         }
-        
+
         // Send to audio processing if we have data
         if buffer_pos > 0 {
             audio_buffer_sender.send(buffer).await;
@@ -211,9 +212,7 @@ async fn usb_streaming_task(
 
 /// Sends sample rate feedback to the host.
 #[embassy_executor::task]
-async fn usb_feedback_task(
-    mut feedback: speaker::Feedback<'static, UsbDriver<'static>>,
-) {
+async fn usb_feedback_task(mut feedback: speaker::Feedback<'static, UsbDriver<'static>>) {
     loop {
         feedback.wait_connection().await;
         log::info!("USB Audio feedback connected");
@@ -239,13 +238,21 @@ async fn usb_control_task(control_monitor: speaker::ControlMonitor<'static>) {
         if let Some(volume) = control_monitor.volume(uac1::Channel::LeftFront) {
             let volume_bits = volume_to_u32(volume);
             VOLUME_LEFT.store(volume_bits, Ordering::Relaxed);
-            log::info!("Left volume changed to {:?} (scale: {:.3})", volume, u32_to_scale(volume_bits));
+            log::info!(
+                "Left volume changed to {:?} (scale: {:.3})",
+                volume,
+                u32_to_scale(volume_bits)
+            );
         }
-        
+
         if let Some(volume) = control_monitor.volume(uac1::Channel::RightFront) {
             let volume_bits = volume_to_u32(volume);
             VOLUME_RIGHT.store(volume_bits, Ordering::Relaxed);
-            log::info!("Right volume changed to {:?} (scale: {:.3})", volume, u32_to_scale(volume_bits));
+            log::info!(
+                "Right volume changed to {:?} (scale: {:.3})",
+                volume,
+                u32_to_scale(volume_bits)
+            );
         }
     }
 }
@@ -266,7 +273,7 @@ pub fn init_usb_audio(
 
     // Configure all required buffers in a static way.
     log::debug!("USB packet size is {} bytes", USB_MAX_PACKET_SIZE);
-    
+
     static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
     let config_descriptor = CONFIG_DESCRIPTOR.init([0; 256]);
 
@@ -293,7 +300,7 @@ pub fn init_usb_audio(
     let driver = UsbDriver::new(usb, ep_out_buffer, usb_config);
 
     // Basic USB device configuration
-    let mut config = embassy_usb::Config::new(0x1209, 0x53A0 ); // https://github.com/pidcodes/pidcodes.github.com/pull/1111
+    let mut config = embassy_usb::Config::new(0x1209, 0x53A0); // https://github.com/pidcodes/pidcodes.github.com/pull/1111
     config.manufacturer = Some("Rieger Industries");
     config.product = Some("Diskomator 9000 Pro Max");
     config.serial_number = Some("0000000001");

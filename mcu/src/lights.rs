@@ -6,7 +6,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal}
 use esp_hal::Async;
 use esp_hal::{dma_buffers, i2s::master::DataFormat, time::Rate};
 
-use anyhow::{Result};
+use anyhow::Result;
 
 use microfft::{Complex32, real::rfft_512};
 use smart_leds::RGB8;
@@ -192,21 +192,21 @@ impl AdpcmDecoder {
         }
 
         const STEP_TABLE: [i32; 89] = [
-            7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
-            50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230,
-            253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963,
-            1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327,
-            3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487,
-            12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+            7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55,
+            60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307,
+            337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411,
+            1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358,
+            5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500,
+            20350, 22385, 24623, 27086, 29794, 32767,
         ];
 
         const INDEX_TABLE: [i32; 16] = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
 
         let mut out_pos = 0;
-        let samples_per_block = if num_channels == 2 { 
-            ((input.len() - 8) * 2) + 2 
-        } else { 
-            ((input.len() - 4) * 2) + 1 
+        let samples_per_block = if num_channels == 2 {
+            ((input.len() - 8) * 2) + 2
+        } else {
+            ((input.len() - 4) * 2) + 1
         };
 
         // Decode initial predictors
@@ -214,7 +214,7 @@ impl AdpcmDecoder {
             let offset = ch * 4;
             self.predictor[ch] = i16::from_le_bytes([input[offset], input[offset + 1]]) as i32;
             self.step_index[ch] = input[offset + 2] as i32;
-            
+
             if self.step_index[ch] > 88 {
                 self.step_index[ch] = 88;
             }
@@ -238,53 +238,65 @@ impl AdpcmDecoder {
                     if i + ch * 4 + byte_idx >= input.len() {
                         break;
                     }
-                    
+
                     let byte = input[i + ch * 4 + byte_idx];
-                    
+
                     // Process low nibble
                     if out_pos < output.len() {
                         let nibble = (byte & 0x0F) as i32;
                         let step = STEP_TABLE[self.step_index[ch] as usize];
-                        
+
                         let mut diff = step >> 3;
-                        if nibble & 4 != 0 { diff += step; }
-                        if nibble & 2 != 0 { diff += step >> 1; }
-                        if nibble & 1 != 0 { diff += step >> 2; }
-                        
+                        if nibble & 4 != 0 {
+                            diff += step;
+                        }
+                        if nibble & 2 != 0 {
+                            diff += step >> 1;
+                        }
+                        if nibble & 1 != 0 {
+                            diff += step >> 2;
+                        }
+
                         if nibble & 8 != 0 {
                             self.predictor[ch] -= diff;
                         } else {
                             self.predictor[ch] += diff;
                         }
-                        
+
                         self.predictor[ch] = self.predictor[ch].clamp(-32768, 32767);
                         self.step_index[ch] += INDEX_TABLE[nibble as usize];
                         self.step_index[ch] = self.step_index[ch].clamp(0, 88);
-                        
+
                         output[out_pos] = self.predictor[ch] << 16; // Scale to 32-bit
                         out_pos += 1;
                     }
-                    
+
                     // Process high nibble
                     if out_pos < output.len() {
                         let nibble = ((byte >> 4) & 0x0F) as i32;
                         let step = STEP_TABLE[self.step_index[ch] as usize];
-                        
+
                         let mut diff = step >> 3;
-                        if nibble & 4 != 0 { diff += step; }
-                        if nibble & 2 != 0 { diff += step >> 1; }
-                        if nibble & 1 != 0 { diff += step >> 2; }
-                        
+                        if nibble & 4 != 0 {
+                            diff += step;
+                        }
+                        if nibble & 2 != 0 {
+                            diff += step >> 1;
+                        }
+                        if nibble & 1 != 0 {
+                            diff += step >> 2;
+                        }
+
                         if nibble & 8 != 0 {
                             self.predictor[ch] -= diff;
                         } else {
                             self.predictor[ch] += diff;
                         }
-                        
+
                         self.predictor[ch] = self.predictor[ch].clamp(-32768, 32767);
                         self.step_index[ch] += INDEX_TABLE[nibble as usize];
                         self.step_index[ch] = self.step_index[ch].clamp(0, 88);
-                        
+
                         output[out_pos] = self.predictor[ch] << 16; // Scale to 32-bit
                         out_pos += 1;
                     }
@@ -301,12 +313,12 @@ fn parse_wave_header(data: &[u8]) -> Result<WaveHeader> {
     if data.len() < 44 {
         return Err(error_with_location!("WAVE file too small"));
     }
-    
+
     // Check RIFF header
     if &data[0..4] != b"RIFF" || &data[8..12] != b"WAVE" {
         return Err(error_with_location!("Invalid WAVE file header"));
     }
-    
+
     // Find fmt chunk
     let mut offset = 12;
     while offset + 8 < data.len() {
@@ -317,12 +329,12 @@ fn parse_wave_header(data: &[u8]) -> Result<WaveHeader> {
             data[offset + 6],
             data[offset + 7],
         ]) as usize;
-        
+
         if chunk_id == b"fmt " {
             if chunk_size < 16 {
                 return Err(error_with_location!("Invalid fmt chunk size"));
             }
-            
+
             let audio_format = u16::from_le_bytes([data[offset + 8], data[offset + 9]]);
             let num_channels = u16::from_le_bytes([data[offset + 10], data[offset + 11]]);
             let sample_rate = u32::from_le_bytes([
@@ -333,7 +345,7 @@ fn parse_wave_header(data: &[u8]) -> Result<WaveHeader> {
             ]);
             let block_align = u16::from_le_bytes([data[offset + 20], data[offset + 21]]);
             let bits_per_sample = u16::from_le_bytes([data[offset + 22], data[offset + 23]]);
-            
+
             // Find data chunk
             let mut data_offset = offset + 8 + chunk_size;
             while data_offset + 8 < data.len() {
@@ -344,7 +356,7 @@ fn parse_wave_header(data: &[u8]) -> Result<WaveHeader> {
                     data[data_offset + 6],
                     data[data_offset + 7],
                 ]) as usize;
-                
+
                 if data_chunk_id == b"data" {
                     return Ok(WaveHeader {
                         sample_rate,
@@ -356,16 +368,16 @@ fn parse_wave_header(data: &[u8]) -> Result<WaveHeader> {
                         block_align,
                     });
                 }
-                
+
                 data_offset += 8 + data_chunk_size;
             }
-            
+
             return Err(error_with_location!("data chunk not found"));
         }
-        
+
         offset += 8 + chunk_size;
     }
-    
+
     Err(error_with_location!("fmt chunk not found"))
 }
 
@@ -381,7 +393,7 @@ fn read_fake_i2s_samples(
 ) -> usize {
     let audio_data = &FAKE_AUDIO_DATA[header.data_offset..header.data_offset + header.data_size];
     let mut written = 0;
-    
+
     // For ADPCM, we need to decode blocks
     if header.audio_format == 17 {
         // IMA ADPCM
@@ -390,7 +402,7 @@ fn read_fake_i2s_samples(
             if *decode_buffer_pos < *decode_buffer_len {
                 let sample = decode_buffer[*decode_buffer_pos];
                 *decode_buffer_pos += 1;
-                
+
                 // Convert i32 sample to 4 bytes (little-endian)
                 let bytes = sample.to_le_bytes();
                 let to_write = core::cmp::min(4, buffer.len() - written);
@@ -406,9 +418,10 @@ fn read_fake_i2s_samples(
                     decoder.step_index = [0, 0];
                     continue;
                 }
-                
+
                 let block = &audio_data[*position..*position + block_size];
-                *decode_buffer_len = decoder.decode_block(block, decode_buffer, header.num_channels as usize);
+                *decode_buffer_len =
+                    decoder.decode_block(block, decode_buffer, header.num_channels as usize);
                 *decode_buffer_pos = 0;
                 *position += block_size;
             }
@@ -422,14 +435,15 @@ fn read_fake_i2s_samples(
                 *position = 0;
                 continue;
             }
-            
+
             let to_copy = core::cmp::min(buffer.len() - written, remaining_audio);
-            buffer[written..written + to_copy].copy_from_slice(&audio_data[*position..*position + to_copy]);
+            buffer[written..written + to_copy]
+                .copy_from_slice(&audio_data[*position..*position + to_copy]);
             *position += to_copy;
             written += to_copy;
         }
     }
-    
+
     written
 }
 
@@ -446,12 +460,17 @@ pub async fn audio_processing_task(
     #[cfg(feature = "fake-i2s")]
     {
         log::info!("Using fake I2S audio from embedded WAVE file");
-        
+
         // Parse WAVE file header
         let wave_header = match parse_wave_header(FAKE_AUDIO_DATA) {
             Ok(header) => {
-                log::info!("WAVE file: {}Hz, {} bits, {} channels, format: {}", 
-                    header.sample_rate, header.bits_per_sample, header.num_channels, header.audio_format);
+                log::info!(
+                    "WAVE file: {}Hz, {} bits, {} channels, format: {}",
+                    header.sample_rate,
+                    header.bits_per_sample,
+                    header.num_channels,
+                    header.audio_format
+                );
                 header
             }
             Err(e) => {
@@ -468,27 +487,27 @@ pub async fn audio_processing_task(
                 }
             }
         };
-        
+
         let i2s_buffer = static_buf!(u8, I2S_BUFFER_SIZE);
         let mut position = 0usize;
         let mut decoder = AdpcmDecoder::new();
-        
+
         // Buffer for decoded ADPCM samples (enough for one block)
         const MAX_SAMPLES_PER_BLOCK: usize = 4096;
         let decode_buffer = static_buf!(i32, MAX_SAMPLES_PER_BLOCK);
         let mut decode_buffer_pos = 0usize;
         let mut decode_buffer_len = 0usize;
-        
+
         loop {
             // Check for config updates
             if let Some(new_config) = config_signal.try_take() {
                 log::info!("Received updated config");
                 current_config = new_config;
             }
-            
+
             const SAMPLE_SIZE: usize = 4 * 2; // 2 * 24 bit stereo in 32-bit containers
             const SAMPLES_TO_TAKE: usize = 256;
-            
+
             // Read fake samples (handles ADPCM decoding internally)
             let bytes_read = read_fake_i2s_samples(
                 i2s_buffer,
@@ -499,7 +518,7 @@ pub async fn audio_processing_task(
                 &mut decode_buffer_pos,
                 &mut decode_buffer_len,
             );
-            
+
             if bytes_read >= SAMPLES_TO_TAKE * SAMPLE_SIZE {
                 let slice = &i2s_buffer[0..SAMPLES_TO_TAKE * SAMPLE_SIZE];
                 match process_audio_samples(slice) {
@@ -513,12 +532,12 @@ pub async fn audio_processing_task(
                     }
                 }
             }
-            
+
             // Simulate timing similar to real I2S
             embassy_time::Timer::after(embassy_time::Duration::from_millis(10)).await;
         }
     }
-    
+
     #[cfg(not(feature = "fake-i2s"))]
     {
         let (mut rx_buffer, rx_descriptors, _, _) = dma_buffers!(I2S_BUFFER_SIZE, 0);

@@ -29,6 +29,24 @@ pub enum NeopixelMatrixPattern {
     Quarters([ChannelConfig; 4]),
 }
 
+impl NeopixelMatrixPattern {
+    pub fn get_all_channels(&self) -> &[ChannelConfig] {
+        match self {
+            NeopixelMatrixPattern::Stripes(chs) => chs,
+            NeopixelMatrixPattern::Bars(chs) => chs,
+            NeopixelMatrixPattern::Quarters(chs) => chs,
+        }
+    }
+
+    pub fn get_all_channels_mut(&mut self) -> &mut [ChannelConfig] {
+        match self {
+            NeopixelMatrixPattern::Stripes(chs) => chs,
+            NeopixelMatrixPattern::Bars(chs) => chs,
+            NeopixelMatrixPattern::Quarters(chs) => chs,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum FFTSize {
     Size128 = 128,

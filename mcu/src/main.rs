@@ -23,7 +23,7 @@ use esp_hal::{
     timer::{AnyTimer, timg::TimerGroup},
 };
 
-use anyhow::{Result};
+use anyhow::Result;
 
 use esp_hal::peripherals::Peripherals;
 
@@ -35,8 +35,8 @@ use rtt_target::{ChannelMode, rprintln, rtt_init_print};
 
 mod bluetooth;
 mod lights;
-pub mod util;
 mod usb_audio;
+pub mod util;
 
 mod ws2812;
 
@@ -184,7 +184,7 @@ async fn _main(spawner: Spawner) -> Result<!> {
     if USE_USB_AUDIO {
         // USB Audio setup
         log::info!("[main] Initializing USB Audio...");
-        
+
         // Create a static channel for passing audio data from USB to audio processing
         use embassy_sync::channel;
         type AudioChannel = channel::Channel<
@@ -192,17 +192,27 @@ async fn _main(spawner: Spawner) -> Result<!> {
             Box<[u8; 2048]>,
             4,
         >;
-        type AudioSender<'a> = channel::Sender<'a, embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Box<[u8; 2048]>, 4>;
-        type AudioReceiver<'a> = channel::Receiver<'a, embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Box<[u8; 2048]>, 4>;
-        
+        type AudioSender<'a> = channel::Sender<
+            'a,
+            embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+            Box<[u8; 2048]>,
+            4,
+        >;
+        type AudioReceiver<'a> = channel::Receiver<
+            'a,
+            embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+            Box<[u8; 2048]>,
+            4,
+        >;
+
         static AUDIO_BUFFER_CHANNEL: StaticCell<AudioChannel> = StaticCell::new();
         static AUDIO_SENDER: StaticCell<AudioSender<'static>> = StaticCell::new();
         static AUDIO_RECEIVER: StaticCell<AudioReceiver<'static>> = StaticCell::new();
-        
+
         let audio_channel = &*AUDIO_BUFFER_CHANNEL.init(channel::Channel::new());
         let audio_sender = AUDIO_SENDER.init(audio_channel.sender());
         let audio_receiver = AUDIO_RECEIVER.init(audio_channel.receiver());
-        
+
         // ESP32-S3 USB OTG uses GPIO19 and GPIO20
         usb_audio::init_usb_audio(
             &spawner,
@@ -212,7 +222,7 @@ async fn _main(spawner: Spawner) -> Result<!> {
             audio_sender,
         )
         .map_err(|e| error_with_location!("Failed to initialize USB audio: {:?}", e))?;
-        
+
         // Start USB audio processing task
         spawner
             .spawn(lights::usb_audio_processing_task(
@@ -220,8 +230,10 @@ async fn _main(spawner: Spawner) -> Result<!> {
                 neopixel_signal,
                 config_signal,
             ))
-            .map_err(|e| error_with_location!("Failed to spawn USB audio processing task: {:?}", e))?;
-        
+            .map_err(|e| {
+                error_with_location!("Failed to spawn USB audio processing task: {:?}", e)
+            })?;
+
         log::info!("[main] USB Audio initialized");
     }
 
